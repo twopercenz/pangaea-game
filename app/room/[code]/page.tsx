@@ -1,8 +1,16 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { EffectType, PlateId, RoomState } from "@/lib/types";
-import { PLATE_SHAPES, PLATE_VIEWBOX } from "@/lib/plateShapes";
+import { EffectType, PlateId, RoomState, TargetId } from "@/lib/types";
+import {
+  PLATE_SHAPES,
+  PLATE_VIEWBOX,
+  PlateShape,
+  SUPER_COLOR,
+  SUPER_SPLIT,
+} from "@/lib/plateShapes";
+import { MERGE_DEF, SUPER_DEFS, SUPER_OF_PLATE } from "@/lib/plates";
+import { stageOf } from "@/lib/gameLogic";
 
 const EFFECT_LABEL: Record<EffectType, { label: string; desc: string }> = {
   forward1: { label: "1칸 전진", desc: "조각 하나를 1칸 이동" },
@@ -37,7 +45,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   const [playerId, setPlayerId] = useState<string>("");
   const [error, setError] = useState("");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [selectedPlate, setSelectedPlate] = useState<PlateId | null>(null);
+  const [selectedPlate, setSelectedPlate] = useState<TargetId | null>(null);
   const [answering, setAnswering] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,7 +113,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     const card = room?.players.find((p) => p.id === playerId)?.hand.find((c) => c.cardId === selectedCard);
     if (!card) return;
     if (card.type !== "allForward1" && !selectedPlate) {
-      setError("이동시킬 조각을 먼저 선택하세요.");
+      setError("이동시킬 대상을 먼저 선택하세요.");
       return;
     }
     const res = await fetch(`/api/rooms/${code}/play`, {
@@ -154,6 +162,9 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   const pending = room.pendingPlay;
   const iAmAnswering = pending?.playerId === playerId;
   const myColor = SEAT_COLORS[room.players.findIndex((p) => p.id === playerId) % SEAT_COLORS.length] ?? SEAT_COLORS[0];
+  // 전체 전진 카드는 대상을 고를 필요가 없으므로 그때만 보드 선택을 잠근다.
+  const pickedCard = me?.hand.find((c) => c.cardId === selectedCard) ?? null;
+  const needsTarget = !!pickedCard && pickedCard.type !== "allForward1";
 
   return (
     <main className="min-h-screen bg-[#08080d] p-4 text-white md:p-8">
@@ -223,7 +234,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
               room={room}
               selectedPlate={selectedPlate}
               onSelect={setSelectedPlate}
-              selectable={isMyTurn && room.phase === "awaiting-play" && !!selectedCard && selectedCard !== "allForward1"}
+              selectable={isMyTurn && room.phase === "awaiting-play" && needsTarget}
             />
 
             {room.lastAnswer && (
@@ -302,10 +313,19 @@ export function PangaeaBoard({
   selectable,
 }: {
   room: RoomState;
-  selectedPlate: PlateId | null;
-  onSelect: (id: PlateId) => void;
+  selectedPlate: TargetId | null;
+  onSelect: (id: TargetId) => void;
   selectable: boolean;
 }) {
+  const stage = stageOf(room);
+  // 합체가 진행될수록 두 초대륙 사이 테티스 해가 닫힌다.
+  const mergeFrac = room.merge.progress / MERGE_DEF.trackLength;
+  const splitScale = 1 - mergeFrac;
+  const splitOf = (id: PlateId): [number, number] => {
+    const [sx, sy] = SUPER_SPLIT[SUPER_OF_PLATE[id]];
+    return [sx * splitScale, sy * splitScale];
+  };
+
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b12]">
       {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우 (피그마 배경 참고) */}
@@ -317,8 +337,12 @@ export function PangaeaBoard({
       <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-white/[0.06]" />
 
       <p className="absolute left-3 top-3 z-10 text-xs text-white/30">
-        조각을 밀어 넣어 판게아를 완성하세요
+        {stage === "assemble"
+          ? "1단계 — 조각을 모아 로라시아와 곤드와나를 만드세요"
+          : "2단계 — 테티스 해를 닫아 두 초대륙을 합치세요"}
       </p>
+
+      <SuperContinentBadges room={room} />
 
       {/* 조각 SVG 7종은 모두 같은 viewBox 좌표계라, 한 SVG 안에 그대로 얹으면 판게아가 맞물린다. */}
       <svg
@@ -326,31 +350,47 @@ export function PangaeaBoard({
         className="absolute inset-0 size-full"
         preserveAspectRatio="xMidYMid meet"
       >
-        {/* 완성 위치를 알려주는 고스트 실루엣 */}
-        <g fill="none" stroke="#ffffff" strokeOpacity="0.13" strokeWidth="0.6" strokeDasharray="2 2">
-          {room.plates.map((plate) =>
-            PLATE_SHAPES[plate.id].paths.map((d, i) => <path key={`${plate.id}-${i}`} d={d} />)
-          )}
-        </g>
+        {/* 각 조각이 들어갈 자리를 알려주는 고스트 실루엣 (소속 초대륙과 함께 움직인다) */}
+        {room.plates.map((plate) => {
+          const [sx, sy] = splitOf(plate.id);
+          return (
+            <g
+              key={`ghost-${plate.id}`}
+              transform={`translate(${sx} ${sy})`}
+              fill="none"
+              stroke={SUPER_COLOR[SUPER_OF_PLATE[plate.id]]}
+              strokeOpacity="0.18"
+              strokeWidth="0.6"
+              strokeDasharray="2 2"
+              className="transition-transform duration-700"
+            >
+              {PLATE_SHAPES[plate.id].paths.map((d, i) => (
+                <path key={i} d={d} />
+              ))}
+            </g>
+          );
+        })}
 
         {room.plates.map((plate) => {
           const shape = PLATE_SHAPES[plate.id];
           const trackLen = TRACK_LENGTHS[plate.id];
           const isDone = !!plate.completedBy;
           const isSelected = selectedPlate === plate.id;
-          // 진행할수록 표류 거리가 줄어들어 제자리(판게아)로 붙는다.
+          // 조각 진행도만큼 표류가 줄어 소속 초대륙 자리에 붙고,
+          // 그 초대륙 전체는 합체 진행도만큼 상대 초대륙 쪽으로 다가간다.
           const remaining = isDone ? 0 : 1 - Math.min(1, plate.progress / trackLen);
-          const [dx, dy] = shape.drift;
+          const [sx, sy] = splitOf(plate.id);
+          const dx = shape.drift[0] * remaining + sx;
+          const dy = shape.drift[1] * remaining + sy;
           const owner = room.players.find((p) => p.id === plate.completedBy);
+          const clickable = selectable && stage === "assemble" && !isDone;
 
           return (
             <g
               key={plate.id}
-              transform={`translate(${dx * remaining} ${dy * remaining})`}
-              onClick={selectable && !isDone ? () => onSelect(plate.id) : undefined}
-              className={`transition-transform duration-500 ${
-                selectable && !isDone ? "cursor-pointer" : "cursor-default"
-              }`}
+              transform={`translate(${dx} ${dy})`}
+              onClick={clickable ? () => onSelect(plate.id) : undefined}
+              className={`transition-transform duration-700 ${clickable ? "cursor-pointer" : "cursor-default"}`}
               style={{
                 filter: isSelected
                   ? "drop-shadow(0 0 3px #ffffff)"
@@ -371,39 +411,117 @@ export function PangaeaBoard({
                   className="transition-all"
                 />
               ))}
-              <text
-                x={shape.label[0]}
-                y={shape.label[1]}
-                textAnchor="middle"
-                fontSize="7"
-                fontWeight="700"
-                fill="#ffffff"
-                style={{ paintOrder: "stroke", pointerEvents: "none" }}
-                stroke="#000000"
-                strokeOpacity={0.5}
-                strokeWidth="1.6"
-              >
-                {PLATE_NAME[plate.id]}
-              </text>
-              <text
-                x={shape.label[0]}
-                y={shape.label[1] + 8}
-                textAnchor="middle"
-                fontSize="5.5"
-                fill="#ffffff"
-                fillOpacity={0.85}
-                style={{ paintOrder: "stroke", pointerEvents: "none" }}
-                stroke="#000000"
-                strokeOpacity={0.5}
-                strokeWidth="1.4"
-              >
-                {isDone ? `${owner?.name ?? ""} 완성` : `${plate.progress}/${trackLen}칸`}
-              </text>
+              <PlateLabel
+                shape={shape}
+                title={PLATE_NAME[plate.id]}
+                subtitle={isDone ? `${owner?.name ?? ""} 완성` : `${plate.progress}/${trackLen}칸`}
+              />
             </g>
           );
         })}
       </svg>
+
+      {stage === "merge" && (
+        <MergeControl
+          room={room}
+          selected={selectedPlate === "pangaea"}
+          selectable={selectable}
+          onSelect={() => onSelect("pangaea")}
+        />
+      )}
     </div>
+  );
+}
+
+/** 조각 위에 얹는 이름 + 진행도. 외곽선을 깔아 어떤 색 위에서도 읽히게 한다. */
+function PlateLabel({ shape, title, subtitle }: { shape: PlateShape; title: string; subtitle: string }) {
+  const [x, y] = shape.label;
+  const common = {
+    textAnchor: "middle" as const,
+    stroke: "#000000",
+    strokeOpacity: 0.5,
+    style: { paintOrder: "stroke", pointerEvents: "none" as const },
+  };
+  return (
+    <>
+      <text {...common} x={x} y={y} fontSize="7" fontWeight="700" fill="#ffffff" strokeWidth="1.6">
+        {title}
+      </text>
+      <text {...common} x={x} y={y + 8} fontSize="5.5" fill="#ffffff" fillOpacity={0.85} strokeWidth="1.4">
+        {subtitle}
+      </text>
+    </>
+  );
+}
+
+/** 두 초대륙의 조립 현황 배지 */
+function SuperContinentBadges({ room }: { room: RoomState }) {
+  return (
+    <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-1.5">
+      {SUPER_DEFS.map((def) => {
+        const state = room.superContinents.find((s) => s.id === def.id)!;
+        const done = def.members.filter((m) => room.plates.find((p) => p.id === m)?.completedBy).length;
+        const color = SUPER_COLOR[def.id];
+        const owner = room.players.find((p) => p.id === state.completedBy);
+        return (
+          <div
+            key={def.id}
+            style={{ borderColor: state.completedBy ? color : "rgba(255,255,255,0.1)", color }}
+            className="rounded-lg border bg-black/50 px-2.5 py-1 text-[11px] backdrop-blur-sm"
+          >
+            <b>{def.nameKo}</b>{" "}
+            <span className="text-white/50">
+              {state.completedBy ? `완성 · ${owner?.name ?? ""}` : `${done}/${def.members.length} 조각`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 2단계 전용 타깃 — 조각 대신 이 트랙을 겨냥해 테티스 해를 닫는다. */
+function MergeControl({
+  room,
+  selected,
+  selectable,
+  onSelect,
+}: {
+  room: RoomState;
+  selected: boolean;
+  selectable: boolean;
+  onSelect: () => void;
+}) {
+  const { progress, completedBy } = room.merge;
+  const pct = (progress / MERGE_DEF.trackLength) * 100;
+  const done = !!completedBy;
+  return (
+    <button
+      disabled={!selectable || done}
+      onClick={onSelect}
+      style={{ borderColor: selected ? "#ffffff" : done ? "#10b981" : "rgba(255,255,255,0.15)" }}
+      className={`absolute bottom-3 left-1/2 z-10 w-[min(20rem,85%)] -translate-x-1/2 rounded-xl border bg-black/70 px-4 py-2.5 text-left backdrop-blur-sm transition-colors ${
+        selectable && !done ? "cursor-pointer hover:bg-black/90" : "cursor-default"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-semibold text-white">
+          {done ? "판게아 완성!" : "테티스 해 닫기"}
+        </span>
+        <span className="text-[11px] text-white/50">
+          {progress}/{MERGE_DEF.trackLength}칸 · {MERGE_DEF.points}점
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#60a5fa] to-[#fbbf24] transition-all duration-700"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {selectable && !done && !selected && (
+        <p className="mt-1 text-[11px] text-white/40">여기를 눌러 합체 대상으로 지정하세요</p>
+      )}
+    </button>
   );
 }
 
@@ -421,14 +539,14 @@ export function HandPanel({
   selectedCard: string | null;
   seatColor: string;
   onSelectCard: (id: string) => void;
-  selectedPlate: PlateId | null;
+  selectedPlate: TargetId | null;
   onPlay: () => void;
 }) {
   if (!isMyTurn) {
     return <p className="py-4 text-center text-sm text-white/40">다른 플레이어의 턴을 기다리는 중...</p>;
   }
   const card = hand.find((c) => c.cardId === selectedCard);
-  const needsPlate = card && card.type !== "allForward1";
+  const needsTarget = card && card.type !== "allForward1";
 
   return (
     <div className="space-y-3 rounded-xl border border-white/10 bg-[#0b0b12] p-4">
@@ -455,10 +573,10 @@ export function HandPanel({
       </div>
       <button
         onClick={onPlay}
-        disabled={!selectedCard || (!!needsPlate && !selectedPlate)}
+        disabled={!selectedCard || (!!needsTarget && !selectedPlate)}
         className="rounded-lg border border-white/20 bg-white px-5 py-2 font-semibold text-[#0d1620] disabled:opacity-30"
       >
-        {needsPlate ? (selectedPlate ? "카드 내고 퀴즈 도전!" : "위 보드에서 조각을 먼저 선택하세요") : "카드 내고 퀴즈 도전!"}
+        {needsTarget && !selectedPlate ? "위 보드에서 대상을 먼저 선택하세요" : "카드 내고 퀴즈 도전!"}
       </button>
     </div>
   );

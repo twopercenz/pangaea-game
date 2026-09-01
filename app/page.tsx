@@ -68,7 +68,7 @@ export default function HomePage() {
         <div className="space-y-1 text-center">
           <h1 className="text-2xl font-bold tracking-tight text-white">판게아</h1>
           <p className="text-xs text-white/40">
-            퀴즈를 맞혀 대륙 조각을 밀어 넣고, 판게아를 완성하세요.
+            퀴즈를 맞혀 조각을 모아 로라시아와 곤드와나를 만들고, 두 초대륙을 충돌시켜 판게아를 완성하세요.
           </p>
         </div>
 

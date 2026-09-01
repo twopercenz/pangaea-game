@@ -249,6 +249,13 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
   const player = room.players.find((p) => p.id === playerId)!;
   const correct = pendingPlay.quiz.correctIndex === answerIndex;
 
+  // 효과 적용 로그(조각/초대륙/판게아 완성)보다 정오답이 먼저 찍히도록 여기서 남긴다.
+  room.log.push(
+    correct
+      ? `${player.name}님 정답! (${EFFECT_LABEL[pendingPlay.card.type]} 적용)`
+      : `${player.name}님 오답... 효과가 적용되지 않았습니다.`
+  );
+
   if (correct) {
     const amount = pendingPlay.card.type === "forward2" ? 2 : 1;
     if (pendingPlay.targetPlateId === "pangaea") {
@@ -277,12 +284,6 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
     cardType: pendingPlay.card.type,
     plateId: pendingPlay.targetPlateId,
   };
-  room.log.push(
-    correct
-      ? `${player.name}님 정답! (${EFFECT_LABEL[pendingPlay.card.type]} 적용)`
-      : `${player.name}님 오답... 효과가 적용되지 않았습니다.`
-  );
-
   room.pendingPlay = null;
 
   if (room.merge.completedBy) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createRoom, joinRoom, startGame, playCard, answerQuiz } from "@/lib/gameLogic";
-import { PlateId, RoomState } from "@/lib/types";
+import { RoomState, TargetId } from "@/lib/types";
 import {
   ScoreBoard,
   PangaeaBoard,
@@ -29,7 +29,7 @@ export default function TestUiPage() {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [selectedPlate, setSelectedPlate] = useState<PlateId | null>(null);
+  const [selectedPlate, setSelectedPlate] = useState<TargetId | null>(null);
   const [error, setError] = useState("");
 
   function reset(count = playerCount) {
@@ -74,7 +74,7 @@ export default function TestUiPage() {
     const card = activeRoom.players.find((p) => p.id === activePlayerId)?.hand.find((c) => c.cardId === selectedCard);
     if (!card) return;
     if (card.type !== "allForward1" && !selectedPlate) {
-      setError("이동시킬 조각을 먼저 선택하세요.");
+      setError("이동시킬 대상을 먼저 선택하세요.");
       return;
     }
     withErrorHandling(() => playCard(activeRoom, activePlayerId, selectedCard, selectedPlate));
@@ -93,6 +93,8 @@ export default function TestUiPage() {
   const iAmAnswering = pending?.playerId === viewingPlayerId;
   const viewer = room.players.find((p) => p.id === viewingPlayerId)!;
   const myColor = SEAT_COLORS[room.players.findIndex((p) => p.id === viewingPlayerId) % SEAT_COLORS.length];
+  const pickedCard = viewer.hand.find((c) => c.cardId === selectedCard) ?? null;
+  const needsTarget = !!pickedCard && pickedCard.type !== "allForward1";
 
   return (
     <main className="min-h-screen bg-[#08080d] p-4 text-white md:p-8">
@@ -169,7 +171,7 @@ export default function TestUiPage() {
           room={room}
           selectedPlate={selectedPlate}
           onSelect={setSelectedPlate}
-          selectable={isMyTurn && room.phase === "awaiting-play" && !!selectedCard && selectedCard !== "allForward1"}
+          selectable={isMyTurn && room.phase === "awaiting-play" && needsTarget}
         />
 
         {room.lastAnswer && (

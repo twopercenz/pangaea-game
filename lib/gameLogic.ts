@@ -1,14 +1,20 @@
-import { PLATE_DEFS } from "./plates";
+import { MERGE_DEF, PLATE_DEFS, SUPER_DEFS, SUPER_MAP, SUPER_OF_PLATE } from "./plates";
 import { QUIZ_BANK } from "./quizBank";
 import {
   EffectCard,
   EffectType,
   Player,
-  PlateId,
   PlateState,
   QuizCard,
   RoomState,
+  Stage,
+  TargetId,
 } from "./types";
+
+/** 6조각이 모두 완성되면 두 초대륙이 완성된 것이므로, 판게아 합체 단계로 넘어간다. */
+export function stageOf(room: RoomState): Stage {
+  return room.plates.every((p) => p.completedBy) ? "merge" : "assemble";
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -76,13 +82,15 @@ export function createRoom(hostName: string): RoomState {
     turnOrder: [hostId],
     currentPlayerIndex: 0,
     plates,
+    superContinents: SUPER_DEFS.map((s) => ({ id: s.id, completedBy: null })),
+    merge: { progress: 0, completedBy: null },
     effectDeck: buildEffectDeck(),
     effectDiscard: [],
     quizQueue: shuffle(QUIZ_BANK),
     phase: "lobby",
     pendingPlay: null,
     lastAnswer: null,
-    log: ["방이 생성되었습니다."],
+    log: ["방이 생성되었습니다. 먼저 로라시아와 곤드와나를 만드세요."],
     updatedAt: Date.now(),
   };
   return room;
@@ -138,7 +146,7 @@ function currentPlayer(room: RoomState): Player {
   return room.players.find((p) => p.id === id)!;
 }
 
-export function playCard(room: RoomState, playerId: string, cardId: string, targetPlateId: PlateId | null) {
+export function playCard(room: RoomState, playerId: string, cardId: string, targetPlateId: TargetId | null) {
   if (room.phase !== "awaiting-play") throw new Error("지금은 카드를 낼 수 없습니다.");
   const player = currentPlayer(room);
   if (player.id !== playerId) throw new Error("당신의 턴이 아닙니다.");
@@ -147,11 +155,21 @@ export function playCard(room: RoomState, playerId: string, cardId: string, targ
   if (cardIdx === -1) throw new Error("해당 카드를 갖고 있지 않습니다.");
   const card = player.hand[cardIdx];
 
+  const stage = stageOf(room);
   if (card.type !== "allForward1") {
-    if (!targetPlateId) throw new Error("이동시킬 조각을 선택해야 합니다.");
-    const plate = room.plates.find((p) => p.id === targetPlateId);
-    if (!plate) throw new Error("잘못된 조각입니다.");
-    if (plate.completedBy) throw new Error("이미 완성된 조각입니다.");
+    if (!targetPlateId) throw new Error("이동시킬 대상을 선택해야 합니다.");
+    if (stage === "merge") {
+      // 조각은 전부 제자리를 찾았고, 남은 건 두 초대륙을 붙이는 일뿐이다.
+      if (targetPlateId !== "pangaea") throw new Error("이제 남은 것은 판게아 합체뿐입니다.");
+      if (room.merge.completedBy) throw new Error("판게아는 이미 완성되었습니다.");
+    } else {
+      if (targetPlateId === "pangaea") {
+        throw new Error("로라시아와 곤드와나를 먼저 완성해야 합체할 수 있습니다.");
+      }
+      const plate = room.plates.find((p) => p.id === targetPlateId);
+      if (!plate) throw new Error("잘못된 조각입니다.");
+      if (plate.completedBy) throw new Error("이미 완성된 조각입니다.");
+    }
   }
 
   // 카드를 낸다 (아직 발동 안 함), 손패에서 제거하고 즉시 보충
@@ -163,7 +181,7 @@ export function playCard(room: RoomState, playerId: string, cardId: string, targ
   room.pendingPlay = {
     playerId: player.id,
     card,
-    targetPlateId: card.type === "allForward1" ? null : targetPlateId,
+    targetPlateId: card.type === "allForward1" ? (stage === "merge" ? "pangaea" : null) : targetPlateId,
     quiz,
   };
   room.phase = "awaiting-answer";
@@ -178,13 +196,49 @@ const EFFECT_LABEL: Record<EffectType, string> = {
 };
 
 function applyCompletionCheck(room: RoomState, plate: PlateState, def = PLATE_DEFS.find((d) => d.id === plate.id)!, byPlayerId: string) {
-  if (!plate.completedBy && plate.progress >= def.trackLength) {
-    plate.progress = def.trackLength;
-    plate.completedBy = byPlayerId;
-    const player = room.players.find((p) => p.id === byPlayerId)!;
-    player.score += def.points;
-    room.log.push(`${def.nameKo} 조각이 완성되었습니다! ${player.name}님이 ${def.points}점을 획득했습니다.`);
+  if (plate.completedBy || plate.progress < def.trackLength) return;
+  plate.progress = def.trackLength;
+  plate.completedBy = byPlayerId;
+  const player = room.players.find((p) => p.id === byPlayerId)!;
+  player.score += def.points;
+  room.log.push(`${def.nameKo} 조각이 제자리를 찾았습니다! ${player.name}님이 ${def.points}점을 획득했습니다.`);
+  applySuperContinentCheck(room, plate.id, byPlayerId);
+}
+
+// 마지막 조각을 붙여 초대륙(로라시아/곤드와나)을 완성하면 보너스를 준다.
+function applySuperContinentCheck(room: RoomState, plateId: PlateState["id"], byPlayerId: string) {
+  const superDef = SUPER_MAP[SUPER_OF_PLATE[plateId]];
+  const superState = room.superContinents.find((s) => s.id === superDef.id)!;
+  if (superState.completedBy) return;
+  const allMembersDone = superDef.members.every(
+    (m) => room.plates.find((p) => p.id === m)?.completedBy
+  );
+  if (!allMembersDone) return;
+
+  superState.completedBy = byPlayerId;
+  const player = room.players.find((p) => p.id === byPlayerId)!;
+  player.score += superDef.bonus;
+  room.log.push(
+    `${superDef.nameKo}가 완성되었습니다! ${player.name}님이 보너스 ${superDef.bonus}점을 받습니다.`
+  );
+
+  if (room.superContinents.every((s) => s.completedBy)) {
+    room.log.push("로라시아와 곤드와나가 모두 모였습니다 — 이제 테티스 해를 닫아 판게아를 완성하세요!");
   }
+}
+
+// 2단계: 테티스 해를 닫아 두 초대륙을 충돌시킨다.
+function advanceMerge(room: RoomState, amount: number, byPlayerId: string) {
+  if (room.merge.completedBy) return;
+  room.merge.progress = Math.min(room.merge.progress + amount, MERGE_DEF.trackLength);
+  if (room.merge.progress < MERGE_DEF.trackLength) return;
+
+  room.merge.completedBy = byPlayerId;
+  const player = room.players.find((p) => p.id === byPlayerId)!;
+  player.score += MERGE_DEF.points;
+  room.log.push(
+    `두 초대륙이 충돌해 ${MERGE_DEF.nameKo}가 완성되었습니다! ${player.name}님이 ${MERGE_DEF.points}점을 획득했습니다.`
+  );
 }
 
 export function answerQuiz(room: RoomState, playerId: string, answerIndex: number) {
@@ -196,7 +250,11 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
   const correct = pendingPlay.quiz.correctIndex === answerIndex;
 
   if (correct) {
-    if (pendingPlay.card.type === "allForward1") {
+    const amount = pendingPlay.card.type === "forward2" ? 2 : 1;
+    if (pendingPlay.targetPlateId === "pangaea") {
+      advanceMerge(room, amount, playerId);
+    } else if (pendingPlay.card.type === "allForward1") {
+      // 합체 단계의 전체 전진 카드는 playCard에서 "pangaea"로 지정되므로 여기는 조립 단계뿐이다.
       for (const plate of room.plates) {
         if (plate.completedBy) continue;
         const def = PLATE_DEFS.find((d) => d.id === plate.id)!;
@@ -206,7 +264,6 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
     } else {
       const plate = room.plates.find((p) => p.id === pendingPlay.targetPlateId)!;
       const def = PLATE_DEFS.find((d) => d.id === plate.id)!;
-      const amount = pendingPlay.card.type === "forward2" ? 2 : 1;
       plate.progress = Math.min(plate.progress + amount, def.trackLength);
       applyCompletionCheck(room, plate, def, playerId);
     }
@@ -228,8 +285,7 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
 
   room.pendingPlay = null;
 
-  const allDone = room.plates.every((p) => p.completedBy);
-  if (allDone) {
+  if (room.merge.completedBy) {
     room.phase = "finished";
     room.log.push("판게아가 완성되었습니다! 게임 종료.");
   } else {

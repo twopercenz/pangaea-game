@@ -2,22 +2,16 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { EffectType, PlateId, RoomState } from "@/lib/types";
+import { PLATE_SHAPES, PLATE_VIEWBOX } from "@/lib/plateShapes";
 
-const EFFECT_LABEL: Record<EffectType, { label: string; desc: string; color: string }> = {
-  forward1: { label: "1칸 전진", desc: "조각 하나를 1칸 이동", color: "bg-sky-500" },
-  forward2: { label: "2칸 전진", desc: "조각 하나를 2칸 이동", color: "bg-violet-500" },
-  allForward1: { label: "전체 1칸 전진", desc: "모든 미완성 조각을 1칸씩 이동", color: "bg-amber-500" },
+const EFFECT_LABEL: Record<EffectType, { label: string; desc: string }> = {
+  forward1: { label: "1칸 전진", desc: "조각 하나를 1칸 이동" },
+  forward2: { label: "2칸 전진", desc: "조각 하나를 2칸 이동" },
+  allForward1: { label: "전체 1칸 전진", desc: "모든 미완성 조각을 1칸씩 이동" },
 };
 
-// 판게아 실루엣 근사 배치 (퍼센트 좌표, 지리적으로 정밀하진 않지만 학습용으로 인접 관계를 반영)
-const PLATE_LAYOUT: Record<PlateId, { left: string; top: string; w: string; h: string; color: string }> = {
-  eurasia: { left: "50%", top: "8%", w: "34%", h: "26%", color: "#5b8c5a" },
-  north_america: { left: "24%", top: "12%", w: "24%", h: "24%", color: "#4f7cac" },
-  africa: { left: "40%", top: "38%", w: "24%", h: "28%", color: "#c97b3d" },
-  south_america: { left: "22%", top: "48%", w: "18%", h: "26%", color: "#a85751" },
-  india: { left: "58%", top: "50%", w: "12%", h: "16%", color: "#8a5ea3" },
-  antarctica_australia: { left: "38%", top: "68%", w: "30%", h: "18%", color: "#4a8f8b" },
-};
+// 좌석 색상 — 피그마 판게아 보드의 4방향 카드 존 색상(rose/amber/emerald/blue)을 순환 배정
+export const SEAT_COLORS = ["#f59e0b", "#f43f5e", "#10b981", "#3b82f6"];
 
 const PLATE_NAME: Record<PlateId, string> = {
   eurasia: "유라시아",
@@ -26,6 +20,15 @@ const PLATE_NAME: Record<PlateId, string> = {
   south_america: "남아메리카",
   india: "인도",
   antarctica_australia: "남극-오스트레일리아",
+};
+
+const TRACK_LENGTHS: Record<PlateId, number> = {
+  eurasia: 6,
+  africa: 5,
+  antarctica_australia: 5,
+  north_america: 4,
+  south_america: 4,
+  india: 3,
 };
 
 export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
@@ -138,8 +141,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   if (!room) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#0d1620] text-white">
-        <p className="text-white/60">{error || "불러오는 중..."}</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#08080d] text-white/60">
+        <p>{error || "불러오는 중..."}</p>
       </main>
     );
   }
@@ -150,14 +153,15 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   const isMyTurn = currentPlayerId === playerId;
   const pending = room.pendingPlay;
   const iAmAnswering = pending?.playerId === playerId;
+  const myColor = SEAT_COLORS[room.players.findIndex((p) => p.id === playerId) % SEAT_COLORS.length] ?? SEAT_COLORS[0];
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#1a2a3a] to-[#0d1620] text-white p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <header className="flex items-center justify-between flex-wrap gap-2">
+    <main className="min-h-screen bg-[#08080d] p-4 text-white md:p-8">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#1a1a1a] px-5 py-4">
           <div>
-            <h1 className="text-2xl font-bold">🌍 판게아 — 방 {room.code}</h1>
-            <p className="text-white/50 text-sm">
+            <h1 className="text-xl font-bold">판게아 — 방 {room.code}</h1>
+            <p className="text-sm text-white/40">
               {room.phase === "lobby" && "대기 중"}
               {room.phase === "awaiting-play" && `${room.players.find((p) => p.id === currentPlayerId)?.name}님의 턴`}
               {room.phase === "awaiting-answer" && `${room.players.find((p) => p.id === pending?.playerId)?.name}님 퀴즈 도전 중`}
@@ -168,58 +172,66 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         </header>
 
         {error && (
-          <div className="bg-red-500/20 border border-red-500/40 rounded-lg px-4 py-2 text-sm text-red-200">
+          <div className="rounded-lg border border-[#f43f5e]/40 bg-[#f43f5e]/10 px-4 py-2 text-sm text-[#f43f5e]">
             {error}
           </div>
         )}
 
         {!me && room.phase === "lobby" && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-3 max-w-sm">
+          <div className="max-w-sm space-y-3 rounded-xl border border-white/10 bg-[#1a1a1a] p-6">
             <p>이 방에 참가하시겠어요?</p>
             <input
-              className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-2 outline-none"
+              className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-[#f59e0b]"
               placeholder="닉네임"
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
             />
-            <button onClick={handleJoin} className="w-full rounded-lg bg-emerald-500 py-2 font-semibold">
+            <button
+              onClick={handleJoin}
+              className="w-full rounded-lg border border-[#10b981] bg-[#10b981]/10 py-2 font-semibold text-[#10b981] hover:bg-[#10b981]/20"
+            >
               참가하기
             </button>
           </div>
         )}
 
         {room.phase === "lobby" && me && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-3">
+          <div className="space-y-3 rounded-xl border border-white/10 bg-[#1a1a1a] p-6">
             <p className="text-white/70">
               참가자: {room.players.map((p) => p.name).join(", ")} ({room.players.length}/4)
             </p>
-            <p className="text-white/40 text-sm">
+            <p className="text-sm text-white/40">
               친구에게 방 코드 <b className="text-white">{room.code}</b>를 공유하세요. (최소 2명)
             </p>
             {isHost ? (
               <button
                 onClick={handleStart}
                 disabled={room.players.length < 2}
-                className="rounded-lg bg-emerald-500 disabled:opacity-40 px-5 py-2 font-semibold"
+                className="rounded-lg border border-[#f59e0b] bg-[#f59e0b]/10 px-5 py-2 font-semibold text-[#f59e0b] disabled:opacity-30"
               >
                 게임 시작
               </button>
             ) : (
-              <p className="text-white/50 text-sm">방장이 시작하기를 기다리는 중...</p>
+              <p className="text-sm text-white/40">방장이 시작하기를 기다리는 중...</p>
             )}
           </div>
         )}
 
         {room.phase !== "lobby" && (
           <>
-            <PangaeaBoard room={room} selectedPlate={selectedPlate} onSelect={setSelectedPlate} selectable={isMyTurn && room.phase === "awaiting-play" && !!selectedCard && selectedCard !== "allForward1"} />
+            <PangaeaBoard
+              room={room}
+              selectedPlate={selectedPlate}
+              onSelect={setSelectedPlate}
+              selectable={isMyTurn && room.phase === "awaiting-play" && !!selectedCard && selectedCard !== "allForward1"}
+            />
 
             {room.lastAnswer && (
               <div
-                className={`rounded-xl px-4 py-3 text-sm border ${
+                className={`rounded-xl border px-4 py-3 text-sm ${
                   room.lastAnswer.correct
-                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
-                    : "bg-red-500/15 border-red-500/40 text-red-200"
+                    ? "border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]"
+                    : "border-[#f43f5e]/40 bg-[#f43f5e]/10 text-[#f43f5e]"
                 }`}
               >
                 {room.players.find((p) => p.id === room.lastAnswer!.playerId)?.name}님 —{" "}
@@ -244,6 +256,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
                 hand={me.hand}
                 isMyTurn={isMyTurn}
                 selectedCard={selectedCard}
+                seatColor={myColor}
                 onSelectCard={(id) => {
                   setSelectedCard(id === selectedCard ? null : id);
                   setSelectedPlate(null);
@@ -259,25 +272,30 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
   );
 }
 
-function ScoreBoard({ room, currentPlayerId }: { room: RoomState; currentPlayerId: string }) {
+export function ScoreBoard({ room, currentPlayerId }: { room: RoomState; currentPlayerId: string }) {
   return (
-    <div className="flex gap-2 flex-wrap">
-      {room.players.map((p) => (
-        <div
-          key={p.id}
-          className={`rounded-lg px-3 py-1.5 text-sm border ${
-            p.id === currentPlayerId ? "bg-emerald-500/20 border-emerald-400" : "bg-white/5 border-white/10"
-          }`}
-        >
-          <span className="font-medium">{p.name}</span>{" "}
-          <span className="text-white/50">{p.score}점</span>
-        </div>
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {room.players.map((p, i) => {
+        const color = SEAT_COLORS[i % SEAT_COLORS.length];
+        const isTurn = p.id === currentPlayerId;
+        return (
+          <div
+            key={p.id}
+            style={{ borderColor: isTurn ? color : "rgba(255,255,255,0.1)" }}
+            className={`rounded-lg border bg-[#1a1a1a] px-3 py-1.5 text-sm ${isTurn ? "" : ""}`}
+          >
+            <span className="font-medium" style={{ color: isTurn ? color : "white" }}>
+              {p.name}
+            </span>{" "}
+            <span className="text-white/40">{p.score}점</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function PangaeaBoard({
+export function PangaeaBoard({
   room,
   selectedPlate,
   onSelect,
@@ -289,73 +307,111 @@ function PangaeaBoard({
   selectable: boolean;
 }) {
   return (
-    <div className="relative w-full aspect-[4/3] bg-[#0f2436] rounded-2xl border border-white/10 overflow-hidden">
-      <p className="absolute top-3 left-3 text-white/30 text-xs z-10">
+    <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b12]">
+      {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우 (피그마 배경 참고) */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="size-[70%] rounded-full bg-[#3b82f6]/[0.04] blur-3xl" />
+        <div className="absolute size-[100%] rounded-full bg-[#f59e0b]/[0.03] blur-3xl" />
+      </div>
+      <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-white/[0.06]" />
+      <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-white/[0.06]" />
+
+      <p className="absolute left-3 top-3 z-10 text-xs text-white/30">
         조각을 밀어 넣어 판게아를 완성하세요
       </p>
-      {room.plates.map((plate) => {
-        const layout = PLATE_LAYOUT[plate.id];
-        const total = plate.progress;
-        const pct = (progressLen: number, trackLen: number) => Math.min(100, (progressLen / trackLen) * 100);
-        const trackLen = TRACK_LENGTHS[plate.id];
-        const isDone = !!plate.completedBy;
-        const isSelected = selectedPlate === plate.id;
-        return (
-          <button
-            key={plate.id}
-            disabled={!selectable || isDone}
-            onClick={() => onSelect(plate.id)}
-            style={{
-              left: layout.left,
-              top: layout.top,
-              width: layout.w,
-              height: layout.h,
-              backgroundColor: isDone ? layout.color : `${layout.color}33`,
-              borderColor: isSelected ? "#fff" : isDone ? layout.color : "#ffffff55",
-            }}
-            className={`absolute rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all ${
-              selectable && !isDone ? "cursor-pointer hover:scale-105" : "cursor-default"
-            } ${isDone ? "shadow-lg" : "border-dashed"}`}
-          >
-            <span className="text-xs md:text-sm font-semibold drop-shadow">{PLATE_NAME[plate.id]}</span>
-            {!isDone && (
-              <span className="text-[10px] text-white/70">
-                {total}/{trackLen}칸
-              </span>
-            )}
-            {isDone && (
-              <span className="text-[10px] text-white/90">
-                {room.players.find((p) => p.id === plate.completedBy)?.name} 완성
-              </span>
-            )}
-            {!isDone && (
-              <div className="w-3/4 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white/80"
-                  style={{ width: `${pct(total, trackLen)}%` }}
+
+      {/* 조각 SVG 7종은 모두 같은 viewBox 좌표계라, 한 SVG 안에 그대로 얹으면 판게아가 맞물린다. */}
+      <svg
+        viewBox={PLATE_VIEWBOX}
+        className="absolute inset-0 size-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* 완성 위치를 알려주는 고스트 실루엣 */}
+        <g fill="none" stroke="#ffffff" strokeOpacity="0.13" strokeWidth="0.6" strokeDasharray="2 2">
+          {room.plates.map((plate) =>
+            PLATE_SHAPES[plate.id].paths.map((d, i) => <path key={`${plate.id}-${i}`} d={d} />)
+          )}
+        </g>
+
+        {room.plates.map((plate) => {
+          const shape = PLATE_SHAPES[plate.id];
+          const trackLen = TRACK_LENGTHS[plate.id];
+          const isDone = !!plate.completedBy;
+          const isSelected = selectedPlate === plate.id;
+          // 진행할수록 표류 거리가 줄어들어 제자리(판게아)로 붙는다.
+          const remaining = isDone ? 0 : 1 - Math.min(1, plate.progress / trackLen);
+          const [dx, dy] = shape.drift;
+          const owner = room.players.find((p) => p.id === plate.completedBy);
+
+          return (
+            <g
+              key={plate.id}
+              transform={`translate(${dx * remaining} ${dy * remaining})`}
+              onClick={selectable && !isDone ? () => onSelect(plate.id) : undefined}
+              className={`transition-transform duration-500 ${
+                selectable && !isDone ? "cursor-pointer" : "cursor-default"
+              }`}
+              style={{
+                filter: isSelected
+                  ? "drop-shadow(0 0 3px #ffffff)"
+                  : isDone
+                    ? `drop-shadow(0 0 3px ${shape.color})`
+                    : "none",
+              }}
+            >
+              {shape.paths.map((d, i) => (
+                <path
+                  key={i}
+                  d={d}
+                  fill={shape.color}
+                  fillOpacity={isDone ? 1 : 0.55}
+                  stroke={isSelected ? "#ffffff" : "#000000"}
+                  strokeOpacity={isSelected ? 0.9 : 0.35}
+                  strokeWidth={isSelected ? 1.2 : 0.5}
+                  className="transition-all"
                 />
-              </div>
-            )}
-          </button>
-        );
-      })}
+              ))}
+              <text
+                x={shape.label[0]}
+                y={shape.label[1]}
+                textAnchor="middle"
+                fontSize="7"
+                fontWeight="700"
+                fill="#ffffff"
+                style={{ paintOrder: "stroke", pointerEvents: "none" }}
+                stroke="#000000"
+                strokeOpacity={0.5}
+                strokeWidth="1.6"
+              >
+                {PLATE_NAME[plate.id]}
+              </text>
+              <text
+                x={shape.label[0]}
+                y={shape.label[1] + 8}
+                textAnchor="middle"
+                fontSize="5.5"
+                fill="#ffffff"
+                fillOpacity={0.85}
+                style={{ paintOrder: "stroke", pointerEvents: "none" }}
+                stroke="#000000"
+                strokeOpacity={0.5}
+                strokeWidth="1.4"
+              >
+                {isDone ? `${owner?.name ?? ""} 완성` : `${plate.progress}/${trackLen}칸`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
 
-const TRACK_LENGTHS: Record<PlateId, number> = {
-  eurasia: 6,
-  africa: 5,
-  antarctica_australia: 5,
-  north_america: 4,
-  south_america: 4,
-  india: 3,
-};
-
-function HandPanel({
+export function HandPanel({
   hand,
   isMyTurn,
   selectedCard,
+  seatColor,
   onSelectCard,
   selectedPlate,
   onPlay,
@@ -363,20 +419,22 @@ function HandPanel({
   hand: RoomState["players"][number]["hand"];
   isMyTurn: boolean;
   selectedCard: string | null;
+  seatColor: string;
   onSelectCard: (id: string) => void;
   selectedPlate: PlateId | null;
   onPlay: () => void;
 }) {
   if (!isMyTurn) {
-    return <p className="text-white/40 text-sm text-center py-4">다른 플레이어의 턴을 기다리는 중...</p>;
+    return <p className="py-4 text-center text-sm text-white/40">다른 플레이어의 턴을 기다리는 중...</p>;
   }
   const card = hand.find((c) => c.cardId === selectedCard);
   const needsPlate = card && card.type !== "allForward1";
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
-      <p className="text-sm text-white/60">내 턴 — 카드를 선택해 내세요</p>
-      <div className="flex gap-3 flex-wrap">
+    <div className="space-y-3 rounded-xl border border-white/10 bg-[#0b0b12] p-4">
+      <p className="text-sm text-white/50">내 턴 — 카드를 선택해 내세요</p>
+      {/* game-card-back 스타일: 어두운 카드에 좌석 색 테두리 */}
+      <div className="flex flex-wrap gap-3">
         {hand.map((c) => {
           const meta = EFFECT_LABEL[c.type];
           const isSelected = c.cardId === selectedCard;
@@ -384,12 +442,13 @@ function HandPanel({
             <button
               key={c.cardId}
               onClick={() => onSelectCard(c.cardId)}
-              className={`rounded-xl px-4 py-4 w-36 text-left border-2 transition ${meta.color} ${
-                isSelected ? "border-white scale-105" : "border-transparent opacity-90 hover:opacity-100"
+              style={{ borderColor: isSelected ? "#ffffff" : seatColor }}
+              className={`w-36 rounded-lg border-2 bg-[#1a1a1a] p-4 text-left shadow-[0px_6px_16px_-6px_rgba(0,0,0,0.4)] transition ${
+                isSelected ? "scale-105" : "opacity-90 hover:opacity-100"
               }`}
             >
-              <div className="font-bold">{meta.label}</div>
-              <div className="text-xs text-white/80 mt-1">{meta.desc}</div>
+              <div className="font-bold text-white">{meta.label}</div>
+              <div className="mt-1 text-xs text-white/50">{meta.desc}</div>
             </button>
           );
         })}
@@ -397,7 +456,7 @@ function HandPanel({
       <button
         onClick={onPlay}
         disabled={!selectedCard || (!!needsPlate && !selectedPlate)}
-        className="rounded-lg bg-white text-[#0d1620] disabled:opacity-30 px-5 py-2 font-semibold"
+        className="rounded-lg border border-white/20 bg-white px-5 py-2 font-semibold text-[#0d1620] disabled:opacity-30"
       >
         {needsPlate ? (selectedPlate ? "카드 내고 퀴즈 도전!" : "위 보드에서 조각을 먼저 선택하세요") : "카드 내고 퀴즈 도전!"}
       </button>
@@ -405,7 +464,7 @@ function HandPanel({
   );
 }
 
-function QuizPanel({
+export function QuizPanel({
   pending,
   canAnswer,
   answering,
@@ -419,39 +478,35 @@ function QuizPanel({
   onAnswer: (idx: number) => void;
 }) {
   return (
-    <div className="bg-white/10 border border-white/20 rounded-xl p-5 space-y-4">
-      <p className="text-xs uppercase tracking-wide text-white/50">{pending.quiz.category}</p>
-      <h2 className="text-lg font-semibold">{pending.quiz.question}</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+    <div className="space-y-4 rounded-xl border border-white/10 bg-[#1a1a1a] p-5">
+      <p className="text-xs uppercase tracking-wide text-white/40">{pending.quiz.category}</p>
+      <h2 className="text-lg font-semibold text-white">{pending.quiz.question}</h2>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {pending.quiz.options.map((opt, idx) => (
           <button
             key={idx}
             disabled={!canAnswer || answering}
             onClick={() => onAnswer(idx)}
-            className="text-left rounded-lg bg-white/10 hover:bg-white/20 disabled:hover:bg-white/10 disabled:opacity-60 border border-white/10 px-4 py-3 transition"
+            className="rounded-lg border border-white/10 bg-black/30 px-4 py-3 text-left text-white transition hover:border-[#f59e0b]/60 hover:bg-black/50 disabled:opacity-50 disabled:hover:border-white/10"
           >
             {idx + 1}. {opt}
           </button>
         ))}
       </div>
-      {!canAnswer && (
-        <p className="text-white/40 text-sm">{answererName}님이 답변 중입니다...</p>
-      )}
+      {!canAnswer && <p className="text-sm text-white/40">{answererName}님이 답변 중입니다...</p>}
     </div>
   );
 }
 
-function FinishedPanel({ room }: { room: RoomState }) {
+export function FinishedPanel({ room }: { room: RoomState }) {
   const ranked = [...room.players].sort((a, b) => b.score - a.score);
   return (
-    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 space-y-3">
-      <h2 className="text-xl font-bold">🎉 판게아 완성! 최종 결과</h2>
+    <div className="space-y-3 rounded-xl border border-[#10b981]/30 bg-[#10b981]/10 p-6">
+      <h2 className="text-xl font-bold text-white">🎉 판게아 완성! 최종 결과</h2>
       <ol className="space-y-1">
         {ranked.map((p, i) => (
-          <li key={p.id} className="flex justify-between text-lg">
-            <span>
-              {i + 1}위 {p.name}
-            </span>
+          <li key={p.id} className="flex justify-between text-lg text-white">
+            <span>{i + 1}위 {p.name}</span>
             <span className="font-bold">{p.score}점</span>
           </li>
         ))}

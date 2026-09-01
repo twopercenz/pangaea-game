@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { playCard, sanitizeRoomForPlayer } from "@/lib/gameLogic";
 import { rooms } from "@/lib/store";
-import { PlateId } from "@/lib/types";
+import { TargetId } from "@/lib/types";
 
 export async function POST(
   req: NextRequest,
@@ -16,7 +16,7 @@ export async function POST(
   const { playerId, cardId, targetPlateId } = body as {
     playerId: string;
     cardId: string;
-    targetPlateId: PlateId | null;
+    targetPlateId: TargetId | null;
   };
 
   try {

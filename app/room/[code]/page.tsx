@@ -3,10 +3,14 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { EffectType, PlateId, RoomState, TargetId } from "@/lib/types";
 import {
+  FILLER_COLOR,
+  LANDMASS_PATH,
   PLATE_SHAPES,
   PLATE_VIEWBOX,
   PlateShape,
+  SHELF_PATHS,
   SUPER_COLOR,
+  SUPER_CUT,
   SUPER_SPLIT,
 } from "@/lib/plateShapes";
 import { MERGE_DEF, SUPER_DEFS, SUPER_OF_PLATE } from "@/lib/plates";
@@ -325,9 +329,17 @@ export function PangaeaBoard({
     const [sx, sy] = SUPER_SPLIT[SUPER_OF_PLATE[id]];
     return [sx * splitScale, sy * splitScale];
   };
+  /** 조각 진행도만큼 표류가 줄어 제자리에 붙고, 소속 초대륙 전체는 합체 진행도만큼 다가온다. */
+  const placementOf = (plate: RoomState["plates"][number]) => {
+    const isDone = !!plate.completedBy;
+    const remaining = isDone ? 0 : 1 - Math.min(1, plate.progress / TRACK_LENGTHS[plate.id]);
+    const [sx, sy] = splitOf(plate.id);
+    const drift = PLATE_SHAPES[plate.id].drift;
+    return { isDone, transform: `translate(${drift[0] * remaining + sx} ${drift[1] * remaining + sy})` };
+  };
 
   return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b12]">
+    <div className="relative aspect-[322/416] w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b12]">
       {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우 (피그마 배경 참고) */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="size-[70%] rounded-full bg-[#3b82f6]/[0.04] blur-3xl" />
@@ -371,24 +383,49 @@ export function PangaeaBoard({
           );
         })}
 
+        {/* 조각이 다 붙은 초대륙은 원본 지도의 육괴로 조각 사이 틈을 메운다.
+            육괴를 절단선으로 갈라 자기 쪽만 들고 움직이므로, 테티스 해는 합체가
+            끝나 두 쪽이 절단선에서 맞물릴 때 비로소 메워진다. */}
+        <defs>
+          {SUPER_DEFS.map((def) => (
+            <clipPath key={def.id} id={`cut-${def.id}`} clipPathUnits="userSpaceOnUse">
+              <polygon points={SUPER_CUT[def.id]} />
+            </clipPath>
+          ))}
+        </defs>
+        {SUPER_DEFS.map((def) => {
+          const assembled = room.superContinents.find((s) => s.id === def.id)?.completedBy;
+          if (!assembled) return null;
+          const [sx, sy] = SUPER_SPLIT[def.id];
+          return (
+            <g
+              key={`landfill-${def.id}`}
+              transform={`translate(${sx * splitScale} ${sy * splitScale})`}
+              className="transition-transform duration-700"
+            >
+              <g clipPath={`url(#cut-${def.id})`}>
+                <path d={LANDMASS_PATH} fill={FILLER_COLOR} />
+                {SHELF_PATHS.map((d, i) => (
+                  <path key={i} d={d} fill={FILLER_COLOR} fillOpacity={0.55} />
+                ))}
+              </g>
+            </g>
+          );
+        })}
+
+        {/* 조각 본체와 라벨 — 육괴 바탕 위에 얹는다 */}
         {room.plates.map((plate) => {
           const shape = PLATE_SHAPES[plate.id];
           const trackLen = TRACK_LENGTHS[plate.id];
-          const isDone = !!plate.completedBy;
+          const { isDone, transform } = placementOf(plate);
           const isSelected = selectedPlate === plate.id;
-          // 조각 진행도만큼 표류가 줄어 소속 초대륙 자리에 붙고,
-          // 그 초대륙 전체는 합체 진행도만큼 상대 초대륙 쪽으로 다가간다.
-          const remaining = isDone ? 0 : 1 - Math.min(1, plate.progress / trackLen);
-          const [sx, sy] = splitOf(plate.id);
-          const dx = shape.drift[0] * remaining + sx;
-          const dy = shape.drift[1] * remaining + sy;
           const owner = room.players.find((p) => p.id === plate.completedBy);
           const clickable = selectable && stage === "assemble" && !isDone;
 
           return (
             <g
               key={plate.id}
-              transform={`translate(${dx} ${dy})`}
+              transform={transform}
               onClick={clickable ? () => onSelect(plate.id) : undefined}
               className={`transition-transform duration-700 ${clickable ? "cursor-pointer" : "cursor-default"}`}
               style={{

@@ -1,16 +1,194 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg: #08080d;
-  --card-bg: #1a1a1a;
+  /* Canva 목업 테마 팔레트 — 실제 용도는 자유롭게 매핑 (사용자 확인됨) */
+  --bg: #1b2f33; /* 전체 배경 */
+  --board-bg: #0f1e21; /* 보드 안쪽 어두운 바닥 */
+  --panel: #24393d; /* 카드/패널 배경 */
+  --line: rgba(213, 223, 229, 0.14); /* 테두리 */
+  --text: #d5dfe5; /* 기본 텍스트 */
+  --text-dim: rgba(213, 223, 229, 0.5);
+  --blue: #2589bd; /* 강조 (퀴즈/확인) */
+  --green-1: #28502e; /* 보조 강조 (보상카드) */
+  --green-2: #47682c; /* 보조 강조 2 (성공) */
+  --rose: #b3455a; /* 상대 손패 뒷면 */
+
   --amber: #f59e0b;
-  --rose: #f43f5e;
   --emerald: #10b981;
-  --blue: #3b82f6;
+
+  /* shadcn palette — emerald/teal theme, light variant (see .dark below for
+     the variant actually used by this app, which has no light/dark toggle). */
+  --radius: 0.5rem;
+  --background: oklch(1 0 180);
+  --foreground: oklch(0.1 0.015 169.984);
+  --muted: oklch(0.963 0.002 169.626);
+  --muted-foreground: oklch(0.457 0.019 168.438);
+  --popover: oklch(1 0 180);
+  --popover-foreground: oklch(0.1 0.015 169.984);
+  --card: oklch(1 0 180);
+  --card-foreground: oklch(0.1 0.015 169.984);
+  --border: oklch(0.928 0.008 169.425);
+  --input: oklch(0.928 0.008 169.425);
+  --primary: oklch(0.502 0.099 161.092);
+  --primary-foreground: oklch(1 0 180);
+  --secondary: oklch(0.855 0.017 169.081);
+  --secondary-foreground: oklch(0.334 0.022 167.699);
+  --accent: oklch(0.798 0.042 168.104);
+  --accent-foreground: oklch(0.24 0.021 166.921);
+  --destructive: oklch(0.549 0.203 31.425);
+  --destructive-foreground: oklch(1 0 180);
+  --ring: oklch(0.502 0.099 161.092);
+  --chart-1: oklch(0.502 0.099 161.092);
+  --chart-2: oklch(0.855 0.017 169.081);
+  --chart-3: oklch(0.798 0.042 168.104);
+  --chart-4: oklch(0.877 0.015 169.187);
+  --chart-5: oklch(0.508 0.103 160.675);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--amber);
+  --sidebar-primary-foreground: #1a1305;
+  --sidebar-accent: var(--panel);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--amber);
 }
 
 body {
-  background: var(--bg);
-  color: #e7e7ea;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family:
+    "Pretendard",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* SUCCESS/FAIL 결과 연출 — 색 플래시 후 서서히 사라짐 */
+@keyframes result-flash {
+  0% {
+    opacity: 0.55;
+  }
+  15% {
+    opacity: 0.25;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.result-flash {
+  animation: result-flash 1.5s ease-out forwards;
+}
+
+/* 보상카드 덱에서 손패로 뽑히는 연출 */
+@keyframes draw-fly {
+  0% {
+    transform: translate(40px, -20px) scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 60px) scale(1);
+    opacity: 0;
+  }
+}
+.draw-fly {
+  animation: draw-fly 0.65s ease-in forwards;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.dark {
+  --radius: 0.5rem;
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.987 0.004 169.57);
+  --muted: oklch(0.159 0.002 169.242);
+  --muted-foreground: oklch(0.75 0.017 169.016);
+  --popover: oklch(0 0 0);
+  --popover-foreground: oklch(0.987 0.004 169.57);
+  --card: oklch(0 0 0);
+  --card-foreground: oklch(0.987 0.004 169.57);
+  --border: oklch(0.279 0.016 167.962);
+  --input: oklch(0.279 0.016 167.962);
+  --primary: oklch(0.502 0.099 161.092);
+  --primary-foreground: oklch(1 0 180);
+  --secondary: oklch(0.309 0.014 168.294);
+  --secondary-foreground: oklch(0.837 0.014 169.196);
+  --accent: oklch(0.393 0.034 166.878);
+  --accent-foreground: oklch(0.894 0.018 169.104);
+  --destructive: oklch(0.605 0.225 31.379);
+  --destructive-foreground: oklch(1 0 180);
+  --ring: oklch(0.502 0.099 161.092);
+  --chart-1: oklch(0.502 0.099 161.092);
+  --chart-2: oklch(0.309 0.014 168.294);
+  --chart-3: oklch(0.393 0.034 166.878);
+  --chart-4: oklch(0.341 0.016 168.247);
+  --chart-5: oklch(0.508 0.103 160.675);
+  --sidebar: oklch(0.159 0.002 169.242);
+  --sidebar-foreground: oklch(0.987 0.004 169.57);
+  --sidebar-primary: oklch(0.502 0.099 161.092);
+  --sidebar-primary-foreground: oklch(1 0 180);
+  --sidebar-accent: oklch(0.393 0.034 166.878);
+  --sidebar-accent-foreground: oklch(0.894 0.018 169.104);
+  --sidebar-border: oklch(0.279 0.016 167.962);
+  --sidebar-ring: oklch(0.502 0.099 161.092);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }

@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function HomePage() {
   const router = useRouter();
@@ -56,67 +60,75 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#08080d] flex items-center justify-center p-6">
+    <main className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center p-6">
       {/* radial glow + crosshair grid, matching board aesthetic */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="size-[600px] rounded-full bg-[#f59e0b]/5 blur-3xl" />
+        <div className="size-[600px] rounded-full bg-primary/5 blur-3xl" />
       </div>
       <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-white/5" />
       <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-white/5" />
 
-      <div className="relative w-full max-w-sm space-y-5 rounded-xl border border-[#f59e0b]/40 bg-[#1a1a1a] p-8 shadow-[0px_6px_24px_-6px_rgba(0,0,0,0.6)]">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-white">판게아</h1>
-          <p className="text-xs text-white/40">
+      <Card className="relative w-full max-w-sm border border-primary/40 shadow-[0px_6px_24px_-6px_rgba(0,0,0,0.6)]">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold tracking-tight">판게아</CardTitle>
+          <CardDescription className="text-xs">
             퀴즈를 맞혀 조각을 모아 로라시아와 곤드와나를 만들고, 두 초대륙을 충돌시켜 판게아를 완성하세요.
-          </p>
-        </div>
+          </CardDescription>
+        </CardHeader>
 
-        <input
-          className="w-full rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-[#f59e0b]"
-          placeholder="닉네임"
-          value={name}
-          maxLength={20}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <button
-          onClick={createRoom}
-          disabled={loading !== null}
-          className="w-full rounded-lg border border-[#f59e0b] bg-[#f59e0b]/10 py-3 text-sm font-semibold text-[#f59e0b] transition hover:bg-[#f59e0b]/20 disabled:opacity-40"
-        >
-          {loading === "create" ? "생성 중..." : "새 방 만들기"}
-        </button>
-
-        <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-white/30">
-          <div className="h-px flex-1 bg-white/10" />
-          또는
-          <div className="h-px flex-1 bg-white/10" />
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            className="flex-1 rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-center text-sm uppercase tracking-widest text-white outline-none focus:border-[#10b981]"
-            placeholder="방 코드"
-            value={joinCode}
-            maxLength={4}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+        <CardContent className="space-y-5">
+          <Input
+            className="h-auto rounded-lg px-4 py-3 text-sm"
+            placeholder="닉네임"
+            value={name}
+            maxLength={20}
+            onChange={(e) => setName(e.target.value)}
           />
-          <button
-            onClick={joinRoom}
+
+          <Button
+            onClick={createRoom}
             disabled={loading !== null}
-            className="rounded-lg border border-[#10b981] bg-[#10b981]/10 px-5 text-sm font-semibold text-[#10b981] transition hover:bg-[#10b981]/20 disabled:opacity-40"
+            className="h-auto w-full rounded-lg border border-primary bg-primary/10 py-3 text-sm font-semibold text-primary hover:bg-primary/20 disabled:opacity-40"
           >
-            {loading === "join" ? "..." : "입장"}
-          </button>
-        </div>
+            {loading === "create" ? "생성 중..." : "새 방 만들기"}
+          </Button>
 
-        {error && <p className="text-center text-sm text-[#f43f5e]">{error}</p>}
+          <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="h-px flex-1 bg-white/10" />
+            또는
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
 
-        <p className="pt-2 text-center text-[11px] text-white/25">
-          2~4명 · 고1 통합과학 지질시대 퀴즈 · 약 3분
-        </p>
-      </div>
+          <div className="flex gap-2">
+            <Input
+              className="h-auto flex-1 rounded-lg px-4 py-3 text-center text-sm uppercase tracking-widest focus-visible:border-[var(--emerald)]"
+              placeholder="방 코드"
+              value={joinCode}
+              maxLength={4}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            />
+            <Button
+              onClick={joinRoom}
+              disabled={loading !== null}
+              className="h-auto rounded-lg border border-[var(--emerald)] bg-[var(--emerald)]/10 px-5 text-sm font-semibold text-[var(--emerald)] hover:bg-[var(--emerald)]/20 disabled:opacity-40"
+            >
+              {loading === "join" ? "..." : "입장"}
+            </Button>
+          </div>
+
+          {error && (
+            <Alert variant="destructive" className="justify-center text-center">
+              <AlertDescription className="text-center">{error}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+
+        <CardFooter className="justify-center border-t-0 bg-transparent p-0 pb-6">
+          <p className="text-center text-[11px] text-muted-foreground">
+            2~4명 · 고1 통합과학 지질시대 퀴즈 · 약 3분
+          </p>
+        </CardFooter>
+      </Card>
     </main>
   );
 }

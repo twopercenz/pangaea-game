@@ -3,17 +3,14 @@
 import { useEffect, useState } from "react";
 import { createRoom, joinRoom, startGame, playCard, answerQuiz } from "@/lib/gameLogic";
 import { RoomState, TargetId } from "@/lib/types";
-import {
-  ScoreBoard,
-  PangaeaBoard,
-  HandPanel,
-  QuizPanel,
-  FinishedPanel,
-  SEAT_COLORS,
-} from "@/app/room/[code]/page";
+import { ScoreBoard, FinishedPanel, SEAT_COLORS } from "@/components/game/board";
+import { GameFlow } from "@/components/game/flow";
+import { CanvasScale } from "@/components/game/CanvasScale";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // 실제 API/서버 없이 lib/gameLogic을 브라우저에서 직접 돌려서 혼자 모든 좌석을 오가며
-// UI를 확인할 수 있는 개발용 테스트 페이지. /room/[code]와 같은 컴포넌트를 재사용한다.
+// UI를 확인할 수 있는 개발용 테스트 페이지.
 
 function freshRoom(playerCount: number): RoomState {
   const room = createRoom("테스터1");
@@ -28,16 +25,12 @@ export default function TestUiPage() {
   // 하이드레이션 불일치가 난다. room은 마운트 이후 클라이언트에서만 생성한다.
   const [room, setRoom] = useState<RoomState | null>(null);
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
-  const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [selectedPlate, setSelectedPlate] = useState<TargetId | null>(null);
   const [error, setError] = useState("");
 
   function reset(count = playerCount) {
     const next = freshRoom(count);
     setRoom(next);
     setViewingPlayerId(next.players[0].id);
-    setSelectedCard(null);
-    setSelectedPlate(null);
     setError("");
   }
 
@@ -49,170 +42,118 @@ export default function TestUiPage() {
 
   if (!room || !viewingPlayerId) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#08080d] text-white/40">
+      <main className="flex min-h-screen items-center justify-center bg-[var(--bg)] text-[var(--text-dim)]">
         <p>테스트 게임 준비 중...</p>
       </main>
     );
   }
-  // 위 가드로 room/viewingPlayerId는 non-null이지만, 아래 클로저에서는 재검사가 필요해
-  // 별도 상수로 좁혀서 재사용한다.
   const activeRoom = room;
   const activePlayerId = viewingPlayerId;
 
-  function withErrorHandling(fn: () => void) {
+  async function handlePlayCard(cardId: string, targetPlateId: TargetId | null): Promise<RoomState> {
     try {
-      fn();
-      setRoom({ ...activeRoom });
+      playCard(activeRoom, activePlayerId, cardId, targetPlateId);
+      const next = { ...activeRoom };
+      setRoom(next);
       setError("");
+      return next;
     } catch (e) {
       setError((e as Error).message);
+      throw e;
     }
   }
 
-  function handlePlayCard() {
-    if (!selectedCard) return;
-    const card = activeRoom.players.find((p) => p.id === activePlayerId)?.hand.find((c) => c.cardId === selectedCard);
-    if (!card) return;
-    if (card.type !== "allForward1" && !selectedPlate) {
-      setError("이동시킬 대상을 먼저 선택하세요.");
-      return;
+  async function handleAnswer(idx: number): Promise<RoomState> {
+    if (!activeRoom.pendingPlay) return activeRoom;
+    try {
+      answerQuiz(activeRoom, activeRoom.pendingPlay.playerId, idx);
+      const next = { ...activeRoom };
+      setRoom(next);
+      setError("");
+      return next;
+    } catch (e) {
+      setError((e as Error).message);
+      throw e;
     }
-    withErrorHandling(() => playCard(activeRoom, activePlayerId, selectedCard, selectedPlate));
-    setSelectedCard(null);
-    setSelectedPlate(null);
-  }
-
-  function handleAnswer(idx: number) {
-    if (!activeRoom.pendingPlay) return;
-    withErrorHandling(() => answerQuiz(activeRoom, activeRoom.pendingPlay!.playerId, idx));
   }
 
   const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
-  const isMyTurn = currentPlayerId === viewingPlayerId;
   const pending = room.pendingPlay;
-  const iAmAnswering = pending?.playerId === viewingPlayerId;
   const viewer = room.players.find((p) => p.id === viewingPlayerId)!;
-  const myColor = SEAT_COLORS[room.players.findIndex((p) => p.id === viewingPlayerId) % SEAT_COLORS.length];
-  const pickedCard = viewer.hand.find((c) => c.cardId === selectedCard) ?? null;
-  const needsTarget = !!pickedCard && pickedCard.type !== "allForward1";
 
   return (
-    <main className="min-h-screen bg-[#08080d] p-4 text-white md:p-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-5 py-3 text-sm text-[#f59e0b]">
-          🧪 UI 테스트 전용 페이지 — 서버/다른 플레이어 없이 혼자 모든 좌석을 오가며 화면을 확인할 수 있습니다.
-          실제 방과는 무관하며 새로고침하면 초기화됩니다.
-        </div>
+    <main className="flex h-screen w-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      {/* 개발용 컨트롤 — 한 줄로 압축, 실제 게임 화면 비율에 영향 안 주게 얇게 */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-4 py-2 text-sm">
+        <span className="text-[var(--blue)]">🧪 테스트</span>
 
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-[#1a1a1a] px-5 py-4">
-          <span className="text-sm text-white/50">인원 수</span>
-          {[2, 3, 4].map((n) => (
-            <button
-              key={n}
-              onClick={() => {
-                setPlayerCount(n);
-                reset(n);
-              }}
-              className={`rounded-lg border px-3 py-1.5 text-sm ${
-                playerCount === n ? "border-[#f59e0b] text-[#f59e0b]" : "border-white/10 text-white/60"
-              }`}
-            >
-              {n}명
-            </button>
-          ))}
-          <button
-            onClick={() => reset()}
-            className="ml-auto rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/70 hover:bg-white/10"
-          >
-            게임 다시 시작
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#1a1a1a] px-5 py-4">
-          <span className="text-sm text-white/50">시점 전환 (내가 이 플레이어인 척 보기)</span>
-          {room.players.map((p, i) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                setViewingPlayerId(p.id);
-                setSelectedCard(null);
-                setSelectedPlate(null);
-                setError("");
-              }}
-              style={{ borderColor: viewingPlayerId === p.id ? SEAT_COLORS[i % SEAT_COLORS.length] : "rgba(255,255,255,0.1)" }}
-              className="rounded-lg border bg-black/30 px-3 py-1.5 text-sm"
-            >
-              <span style={{ color: SEAT_COLORS[i % SEAT_COLORS.length] }}>{p.name}</span>
-              {p.id === currentPlayerId && <span className="ml-1 text-white/40">(턴)</span>}
-            </button>
-          ))}
-        </div>
-
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#1a1a1a] px-5 py-4">
-          <div>
-            <h1 className="text-xl font-bold">판게아 — 테스트 방</h1>
-            <p className="text-sm text-white/40">
-              지금 보는 시점: <b className="text-white">{viewer.name}</b> ·{" "}
-              {room.phase === "awaiting-play" && `${room.players.find((p) => p.id === currentPlayerId)?.name}님의 턴`}
-              {room.phase === "awaiting-answer" && `${room.players.find((p) => p.id === pending?.playerId)?.name}님 퀴즈 도전 중`}
-              {room.phase === "finished" && "게임 종료!"}
-            </p>
-          </div>
-          <ScoreBoard room={room} currentPlayerId={currentPlayerId} />
-        </header>
-
-        {error && (
-          <div className="rounded-lg border border-[#f43f5e]/40 bg-[#f43f5e]/10 px-4 py-2 text-sm text-[#f43f5e]">
-            {error}
-          </div>
-        )}
-
-        <PangaeaBoard
-          room={room}
-          selectedPlate={selectedPlate}
-          onSelect={setSelectedPlate}
-          selectable={isMyTurn && room.phase === "awaiting-play" && needsTarget}
-        />
-
-        {room.lastAnswer && (
-          <div
-            className={`rounded-xl border px-4 py-3 text-sm ${
-              room.lastAnswer.correct
-                ? "border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]"
-                : "border-[#f43f5e]/40 bg-[#f43f5e]/10 text-[#f43f5e]"
+        <span className="text-[var(--text-dim)]">인원</span>
+        {[2, 3, 4].map((n) => (
+          <Button
+            key={n}
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setPlayerCount(n);
+              reset(n);
+            }}
+            className={`h-auto rounded px-2 py-1 text-xs ${
+              playerCount === n ? "border-[var(--blue)] text-[var(--blue)]" : "border-[var(--line)] text-[var(--text-dim)]"
             }`}
           >
-            {room.players.find((p) => p.id === room.lastAnswer!.playerId)?.name}님 —{" "}
-            {room.lastAnswer.correct ? "정답!" : `오답 (정답: ${room.lastAnswer.correctAnswerText})`}
-          </div>
-        )}
+            {n}명
+          </Button>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => reset()}
+          className="h-auto rounded px-2 py-1 text-xs text-[var(--text-dim)] hover:bg-white/5"
+        >
+          다시 시작
+        </Button>
 
-        {room.phase === "finished" && <FinishedPanel room={room} />}
-
-        {room.phase === "awaiting-answer" && pending && (
-          <QuizPanel
-            pending={pending}
-            canAnswer={iAmAnswering}
-            answering={false}
-            answererName={room.players.find((p) => p.id === pending.playerId)?.name ?? ""}
-            onAnswer={handleAnswer}
-          />
-        )}
-
-        {room.phase === "awaiting-play" && (
-          <HandPanel
-            hand={viewer.hand}
-            isMyTurn={isMyTurn}
-            selectedCard={selectedCard}
-            seatColor={myColor}
-            onSelectCard={(id) => {
-              setSelectedCard(id === selectedCard ? null : id);
-              setSelectedPlate(null);
+        <span className="ml-3 text-[var(--text-dim)]">시점</span>
+        {room.players.map((p, i) => (
+          <Button
+            key={p.id}
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setViewingPlayerId(p.id);
+              setError("");
             }}
-            selectedPlate={selectedPlate}
-            onPlay={handlePlayCard}
-          />
-        )}
+            style={{ borderColor: viewingPlayerId === p.id ? SEAT_COLORS[i % SEAT_COLORS.length] : "var(--line)" }}
+            className="h-auto rounded bg-black/30 px-2 py-1 text-xs"
+          >
+            <span style={{ color: SEAT_COLORS[i % SEAT_COLORS.length] }}>{p.name}</span>
+            {p.id === currentPlayerId && <span className="ml-1 text-[var(--text-dim)]">턴</span>}
+          </Button>
+        ))}
+
+        <span className="ml-auto text-xs text-[var(--text-dim)]">
+          {viewer.name} 시점 ·{" "}
+          {room.phase === "awaiting-play" && `${room.players.find((p) => p.id === currentPlayerId)?.name}님의 턴`}
+          {room.phase === "awaiting-answer" && `${room.players.find((p) => p.id === pending?.playerId)?.name}님 퀴즈 도전 중`}
+          {room.phase === "finished" && "게임 종료!"}
+        </span>
+        <ScoreBoard room={room} currentPlayerId={currentPlayerId} />
+      </div>
+
+      {error && (
+        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 px-4 py-2">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* 실제 게임 화면과 동일하게 — 나머지 뷰포트 전체를 캔버스로 채운다 */}
+      <div className="relative min-h-0 flex-1">
+        <CanvasScale>
+          <div className="flex h-full w-full flex-col gap-4 p-10 text-[var(--text)]">
+            <GameFlow room={room} playerId={viewingPlayerId} onPlayCard={handlePlayCard} onAnswer={handleAnswer} />
+            {room.phase === "finished" && <FinishedPanel room={room} />}
+          </div>
+        </CanvasScale>
       </div>
     </main>
   );

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1000" width="1100" height="1000" font-family="Pretendard, 'Noto Sans KR', 'Malgun Gothic', sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/>
+    </marker>
+    <marker id="ard" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#777"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1100" height="1000" fill="#fff"/>
+
+  <!-- title -->
+  <text x="40" y="42" font-size="24" font-weight="700" fill="#111">판게아 게임 — 화면 전이도</text>
+  <text x="40" y="68" font-size="14" fill="#555">실선 = 확정 / 점선 = 미정 (결정 필요)</text>
+
+  <!-- A OTHERS_TURN -->
+  <rect x="210" y="100" width="280" height="60" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="130" font-size="17" font-weight="700" text-anchor="middle" fill="#111">OTHERS_TURN</text>
+  <text x="350" y="150" font-size="12" text-anchor="middle" fill="#555">축소 뷰 · 상대 손패 노출</text>
+
+  <!-- B modal -->
+  <rect x="210" y="210" width="280" height="60" fill="#f2f2f2" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="240" font-size="17" font-weight="700" text-anchor="middle" fill="#111">TURN_START_MODAL</text>
+  <text x="350" y="260" font-size="12" text-anchor="middle" fill="#555">"당신 차례입니다"</text>
+
+  <!-- C MY_TURN -->
+  <rect x="210" y="320" width="280" height="60" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="350" font-size="17" font-weight="700" text-anchor="middle" fill="#111">MY_TURN</text>
+  <text x="350" y="370" font-size="12" text-anchor="middle" fill="#555">확대 뷰 · 상대 손패 제거</text>
+
+  <!-- D SELECT_CARD -->
+  <rect x="210" y="440" width="280" height="60" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="470" font-size="17" font-weight="700" text-anchor="middle" fill="#111">SELECT_CARD</text>
+  <text x="350" y="490" font-size="12" text-anchor="middle" fill="#555">카드 확대 · 선택/취소/판 보기</text>
+
+  <!-- E SELECT_PANGAEA -->
+  <rect x="210" y="560" width="280" height="60" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="590" font-size="17" font-weight="700" text-anchor="middle" fill="#111">SELECT_PANGAEA</text>
+  <text x="350" y="610" font-size="12" text-anchor="middle" fill="#555">조각 선택 · 선택/취소</text>
+
+  <!-- F ON_QUIZ -->
+  <rect x="210" y="680" width="280" height="60" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="350" y="710" font-size="17" font-weight="700" text-anchor="middle" fill="#111">ON_QUIZ</text>
+  <text x="350" y="730" font-size="12" text-anchor="middle" fill="#555">4지선다 · 제출/포기</text>
+
+  <!-- G SUCCESS / H FAIL -->
+  <rect x="120" y="820" width="200" height="66" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="220" y="848" font-size="17" font-weight="700" text-anchor="middle" fill="#111">SUCCESS</text>
+  <text x="220" y="868" font-size="12" text-anchor="middle" fill="#555">성공 SFX + 조각 전진</text>
+
+  <rect x="380" y="820" width="200" height="66" fill="#fff" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="480" y="848" font-size="17" font-weight="700" text-anchor="middle" fill="#111">FAIL</text>
+  <text x="480" y="868" font-size="12" text-anchor="middle" fill="#555">실패 SFX + 판 정지</text>
+
+  <!-- side: BOARD_MODAL -->
+  <rect x="700" y="440" width="280" height="60" fill="#f2f2f2" stroke="#111" stroke-width="2.5" rx="6"/>
+  <text x="840" y="470" font-size="17" font-weight="700" text-anchor="middle" fill="#111">BOARD_MODAL</text>
+  <text x="840" y="490" font-size="12" text-anchor="middle" fill="#555">판 전체 보기 (오버레이)</text>
+
+  <!-- side: DRAW (미정) -->
+  <rect x="700" y="320" width="280" height="60" fill="#fff" stroke="#777" stroke-width="2.5" stroke-dasharray="7 5" rx="6"/>
+  <text x="840" y="350" font-size="17" font-weight="700" text-anchor="middle" fill="#555">DRAW_CARD</text>
+  <text x="840" y="370" font-size="12" text-anchor="middle" fill="#777">덱에서 1장 — UI 미정</text>
+
+  <!-- arrows main column -->
+  <line x1="350" y1="160" x2="350" y2="205" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="362" y="187" font-size="13" fill="#111">턴 종료</text>
+
+  <line x1="350" y1="270" x2="350" y2="315" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="362" y="297" font-size="13" fill="#111">확인 (카드·판 상승 연출)</text>
+
+  <line x1="350" y1="380" x2="350" y2="435" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="362" y="412" font-size="13" fill="#111">손패 카드 탭</text>
+
+  <line x1="350" y1="500" x2="350" y2="555" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="362" y="532" font-size="13" fill="#111">선택</text>
+
+  <line x1="350" y1="620" x2="350" y2="675" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="362" y="652" font-size="13" fill="#111">선택</text>
+
+  <!-- quiz -> success/fail -->
+  <path d="M 350 740 L 350 780 L 220 780 L 220 815" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <path d="M 350 740 L 350 780 L 480 780 L 480 815" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="240" y="772" font-size="13" fill="#111">제출 · 정답</text>
+  <text x="405" y="772" font-size="13" fill="#111">제출 · 오답</text>
+
+  <!-- cancel: SELECT_CARD -> MY_TURN -->
+  <path d="M 210 460 L 150 460 L 150 340 L 205 340" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="96" y="404" font-size="13" fill="#111">취소</text>
+
+  <!-- board modal -->
+  <path d="M 490 458 L 695 458" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="530" y="450" font-size="13" fill="#111">판 보기</text>
+  <path d="M 695 484 L 490 484" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="545" y="502" font-size="13" fill="#111">닫기</text>
+
+  <!-- draw (미정) -->
+  <path d="M 490 340 L 695 340" fill="none" stroke="#777" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#ard)"/>
+  <text x="520" y="332" font-size="13" fill="#777">덱 탭</text>
+
+  <!-- SELECT_PANGAEA 취소 (미정 목적지) -->
+  <path d="M 210 600 L 150 600 L 150 490 L 205 490" fill="none" stroke="#777" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#ard)"/>
+  <text x="60" y="560" font-size="13" fill="#777">취소 → ?</text>
+
+  <!-- ON_QUIZ 포기 (미정) -->
+  <path d="M 490 710 L 620 710 L 620 620 L 620 560" fill="none" stroke="#777" stroke-width="2.5" stroke-dasharray="7 5"/>
+  <text x="630" y="660" font-size="13" fill="#777">포기 → ? (카드 소모 여부 미정)</text>
+
+  <!-- return to OTHERS_TURN -->
+  <path d="M 220 886 L 220 940 L 60 940 L 60 130 L 205 130" fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#ar)"/>
+  <path d="M 480 886 L 480 940 L 220 940" fill="none" stroke="#111" stroke-width="2.5"/>
+  <text x="500" y="934" font-size="13" fill="#111">연출 종료 → 다음 플레이어</text>
+
+  <!-- legend -->
+  <rect x="700" y="620" width="340" height="200" fill="#fff" stroke="#111" stroke-width="1.5" rx="6"/>
+  <text x="720" y="650" font-size="15" font-weight="700" fill="#111">결정 필요 항목</text>
+  <text x="720" y="678" font-size="13" fill="#333">1. SELECT_PANGAEA의 취소 목적지</text>
+  <text x="720" y="702" font-size="13" fill="#333">2. ON_QUIZ 포기 시 카드/턴 처리</text>
+  <text x="720" y="726" font-size="13" fill="#333">3. 덱에서 뽑기 액션의 진입 UI</text>
+  <text x="720" y="750" font-size="13" fill="#333">4. SUCCESS/FAIL 표시 형태 (스크린샷 동일)</text>
+  <text x="720" y="774" font-size="13" fill="#333">5. 4인 미만일 때 상대 손패 배치</text>
+  <text x="720" y="798" font-size="13" fill="#333">6. 게임 종료 판정 시점과 결과 화면</text>
+</svg>

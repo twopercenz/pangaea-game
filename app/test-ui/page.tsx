@@ -156,13 +156,16 @@ export default function TestUiPage() {
       <div className="relative min-h-0 flex-1">
         <CanvasScale>
           <div className="flex h-full w-full flex-col gap-4 p-10 text-[var(--text)]">
-            <GameFlow
-              room={room}
-              playerId={viewingPlayerId}
-              onPlayCard={handlePlayCard}
-              onAnswer={handleAnswer}
-              onPickOption={handlePickOption}
-            />
+            {/* 보드/손패 크기가 캔버스 예산을 넘어도(내용이 잘려 안 보이는 대신) 스크롤로 접근 가능하게 안전장치 */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <GameFlow
+                room={room}
+                playerId={viewingPlayerId}
+                onPlayCard={handlePlayCard}
+                onAnswer={handleAnswer}
+                onPickOption={handlePickOption}
+              />
+            </div>
             {room.phase === "finished" && <FinishedPanel room={room} />}
           </div>
         </CanvasScale>

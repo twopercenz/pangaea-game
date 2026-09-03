@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
-import { EVENT_PICTURES, RESULT_PICTURES, pickPicture } from "@/lib/pictures";
+import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -81,13 +81,18 @@ export function GameFlow({
     if (eventTimer.current) clearTimeout(eventTimer.current);
   }, []);
 
+  // 결과/이벤트 사진을 미리 브라우저 캐시에 올려둬서, 실제로 뜰 때 로딩 지연이 없게 한다.
+  useEffect(() => {
+    preloadPictures();
+  }, []);
+
   // 서버(또는 로컬 테스트 룸)에서 새 이벤트가 오면 모두의 화면에 잠깐 띄운다 — 정답자뿐 아니라 관전자도 poll로 감지.
   useEffect(() => {
     const evt = room.lastEvent;
     if (!evt || evt.id === seenEventId.current) return;
     seenEventId.current = evt.id;
     setActiveEvent(evt);
-    setEventPicture(pickPicture(EVENT_PICTURES[evt.eventId]));
+    setEventPicture(pickPicture(EVENT_PICTURES[evt.eventId], evt.eventId));
     if (eventTimer.current) clearTimeout(eventTimer.current);
     eventTimer.current = setTimeout(() => setActiveEvent(null), 2600);
   }, [room.lastEvent]);
@@ -96,7 +101,8 @@ export function GameFlow({
 
   function goResultThenReset(correct: boolean) {
     setScreen(correct ? "SUCCESS" : "FAIL");
-    setResultPicture(pickPicture(RESULT_PICTURES[correct ? "correct" : "incorrect"]));
+    const resultCategory = correct ? "correct" : "incorrect";
+    setResultPicture(pickPicture(RESULT_PICTURES[resultCategory], resultCategory));
     resultTimer.current = setTimeout(() => {
       setScreen("OTHERS_TURN");
       setSelectedCard(null);

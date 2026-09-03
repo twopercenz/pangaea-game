@@ -42,7 +42,40 @@ export const EVENT_PICTURES: Record<EventId, string[]> = {
   continental_surge: [],
 };
 
-export function pickPicture(pool: string[]): string | null {
+// 카테고리별로 방금 뽑았던 사진 — 풀이 작을 때 같은 사진이 연달아 뜨는 걸 막는 데 쓴다.
+const lastPickedByCategory = new Map<string, string>();
+
+/**
+ * pool 안에서 무작위로 하나 뽑는다. category를 넘기면, 풀에 사진이 2장 이상일 때
+ * 직전에 그 카테고리에서 뽑았던 사진은 이번엔 후보에서 뺀다 (연속 반복 방지).
+ */
+export function pickPicture(pool: string[], category?: string): string | null {
   if (pool.length === 0) return null;
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (pool.length === 1) return pool[0];
+
+  const last = category ? lastPickedByCategory.get(category) : undefined;
+  const candidates = last ? pool.filter((p) => p !== last) : pool;
+  const picked = candidates[Math.floor(Math.random() * candidates.length)];
+
+  if (category) lastPickedByCategory.set(category, picked);
+  return picked;
+}
+
+/** 결과/이벤트 연출에 쓰이는 모든 사진 경로 — 프리로딩용으로 한곳에 모아둔다. */
+export const ALL_PICTURES: string[] = [
+  ...RESULT_PICTURES.correct,
+  ...RESULT_PICTURES.incorrect,
+  ...Object.values(EVENT_PICTURES).flat(),
+];
+
+let preloaded = false;
+
+/** 게임 화면 마운트 시 한 번 호출 — 브라우저 캐시에 미리 올려놔서 연출이 뜰 때 지연 없이 바로 보이게 한다. */
+export function preloadPictures() {
+  if (preloaded || typeof window === "undefined") return;
+  preloaded = true;
+  for (const src of ALL_PICTURES) {
+    const img = new window.Image();
+    img.src = src;
+  }
 }

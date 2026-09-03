@@ -217,7 +217,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
           </Alert>
         )}
 
-        <div className="min-h-0 flex-1">
+        {/* 보드/손패 크기가 캔버스 예산을 넘어도(내용이 잘려 안 보이는 대신) 스크롤로 접근 가능하게 안전장치 */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <GameFlow
             room={room}
             playerId={playerId}

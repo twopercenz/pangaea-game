@@ -10,7 +10,7 @@ import {
   SUPER_CUT,
   SUPER_SPLIT,
 } from "@/lib/plateShapes";
-import { MERGE_DEF, SUPER_DEFS, SUPER_OF_PLATE } from "@/lib/plates";
+import { MERGE_DEF, PLATE_DEFS, SUPER_DEFS, SUPER_OF_PLATE } from "@/lib/plates";
 import { stageOf } from "@/lib/gameLogic";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,14 +28,11 @@ export const PLATE_NAME: Record<PlateId, string> = {
   antarctica_australia: "남극-오스트레일리아",
 };
 
-export const TRACK_LENGTHS: Record<PlateId, number> = {
-  eurasia: 6,
-  africa: 5,
-  antarctica_australia: 5,
-  north_america: 4,
-  south_america: 4,
-  india: 3,
-};
+// lib/plates.ts의 PLATE_DEFS가 트랙 길이의 원본이다 — 여기서 다시 값을 베끼면
+// 나중에 한쪽만 바뀌었을 때 진행 칸수 표시가 실제 게임 로직과 어긋나므로 파생시켜 쓴다.
+export const TRACK_LENGTHS: Record<PlateId, number> = Object.fromEntries(
+  PLATE_DEFS.map((p) => [p.id, p.trackLength])
+) as Record<PlateId, number>;
 
 export function ScoreBoard({ room, currentPlayerId }: { room: RoomState; currentPlayerId: string }) {
   return (

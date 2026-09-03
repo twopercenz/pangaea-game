@@ -132,7 +132,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         <div className="mx-auto max-w-5xl space-y-6">
           <Card className="flex-row flex-wrap items-center justify-between gap-3 px-5 py-4">
             <div>
-              <h1 className="text-xl font-bold">판게아 — 방 {room.code}</h1>
+              <h1 className="text-xl font-bold tracking-tight">판게아 — 방 {room.code}</h1>
               <p className="text-sm text-[var(--text-dim)]">대기 중</p>
             </div>
             <ScoreBoard room={room} currentPlayerId={currentPlayerId} />
@@ -200,7 +200,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       <div className="flex h-full w-full flex-col gap-4 p-10 text-[var(--text)]">
         <Card className="flex-row items-center justify-between gap-3 px-6 py-4">
           <div>
-            <h1 className="text-xl font-bold">판게아 — 방 {room.code}</h1>
+            <h1 className="text-xl font-bold tracking-tight">판게아 — 방 {room.code}</h1>
             <p className="text-sm text-[var(--text-dim)]">
               {room.phase === "awaiting-play" && `${room.players.find((p) => p.id === currentPlayerId)?.name}님의 턴`}
               {room.phase === "awaiting-answer" &&

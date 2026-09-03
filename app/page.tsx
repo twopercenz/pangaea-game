@@ -68,10 +68,10 @@ export default function HomePage() {
       <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-white/5" />
       <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-white/5" />
 
-      <Card className="relative w-full max-w-sm border border-primary/40 shadow-[0px_6px_24px_-6px_rgba(0,0,0,0.6)]">
+      <Card className="relative w-full max-w-sm border border-primary/40">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold tracking-tight">판게아</CardTitle>
-          <CardDescription className="text-xs">
+          <CardTitle className="text-display justify-self-center">판게아</CardTitle>
+          <CardDescription className="text-xs leading-relaxed">
             퀴즈를 맞혀 조각을 모아 로라시아와 곤드와나를 만들고, 두 초대륙을 충돌시켜 판게아를 완성하세요.
           </CardDescription>
         </CardHeader>
@@ -93,7 +93,7 @@ export default function HomePage() {
             {loading === "create" ? "생성 중..." : "새 방 만들기"}
           </Button>
 
-          <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="text-eyebrow flex items-center gap-3 uppercase text-muted-foreground">
             <div className="h-px flex-1 bg-white/10" />
             또는
             <div className="h-px flex-1 bg-white/10" />

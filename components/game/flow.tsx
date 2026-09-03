@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
 import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
 import { INCORRECT_SOUND, playSound, preloadSounds } from "@/lib/sounds";
@@ -289,10 +290,12 @@ export function GameFlow({
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="overlay-scrim fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div onClick={(e) => e.stopPropagation()}>{children}</div>
+      <div className="sheet-materialize" onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -391,18 +394,14 @@ function MyTurnBase({
             const meta = EFFECT_FACE[c.type];
             const isSelected = c.cardId === selectedCard;
             return (
-              <Button
+              <HandCard
                 key={c.cardId}
-                variant="ghost"
-                onClick={() => onTapCard(c.cardId)}
-                style={{ borderColor: isSelected ? "#ffffff" : myColor }}
-                className={`h-50 w-40 flex-col items-center justify-center gap-1 whitespace-normal rounded-lg border-2 bg-[var(--panel)] p-4 text-center transition hover:bg-[var(--panel)] ${
-                  isSelected ? "scale-105" : "opacity-90 hover:opacity-100"
-                }`}
-              >
-                <div className="text-3xl font-bold text-[var(--text)]">{meta.face}</div>
-                <div className="mt-1 text-sm text-[var(--text-dim)]">{meta.label}</div>
-              </Button>
+                face={meta.face}
+                label={meta.label}
+                isSelected={isSelected}
+                color={myColor}
+                onCommit={() => onTapCard(c.cardId)}
+              />
             );
           })}
           {drawingCard && (
@@ -414,6 +413,68 @@ function MyTurnBase({
       </div>
       <DeckColumn />
     </div>
+  );
+}
+
+/**
+ * A hand card the player can lift with a drag, not just tap. Tracks the
+ * pointer 1:1 while dragging (Apple, §2), resists past its lift ceiling with
+ * rubber-banding (§9), and — whether committed or released early — always
+ * springs back from wherever it currently sits, never snapping to a fixed
+ * duration (§3/§4). Lifting past the threshold (by distance or by flick
+ * velocity) commits the card, mirroring a small tap for players who'd rather
+ * just click.
+ */
+function HandCard({
+  face,
+  label,
+  isSelected,
+  color,
+  onCommit,
+}: {
+  face: string;
+  label: string;
+  isSelected: boolean;
+  color: string;
+  onCommit: () => void;
+}) {
+  const y = useMotionValue(0);
+  // The lift casts a growing shadow and lightens as it clears the hand —
+  // continuous feedback tied to the drag, not just an end-state flourish.
+  const shadow = useTransform(y, [-90, 0], ["0 24px 40px -8px rgba(0,0,0,0.6)", "0 2px 6px -2px rgba(0,0,0,0.4)"]);
+  const lift = useTransform(y, [-90, 0], [1.06, 1]);
+
+  function settle() {
+    // Interrupt-safe: animate() re-targets from the value's current (live)
+    // position, so a mid-drag release never jumps.
+    animate(y, 0, { type: "spring", stiffness: 420, damping: 32 });
+  }
+
+  return (
+    <motion.div
+      style={{ y, scale: lift, boxShadow: shadow }}
+      drag="y"
+      dragConstraints={{ top: -90, bottom: 0 }}
+      dragElastic={0.35}
+      whileTap={{ scale: 1.02 }}
+      onDragEnd={(_e, info) => {
+        const lifted = info.offset.y < -36 || info.velocity.y < -500;
+        settle();
+        if (lifted) onCommit();
+      }}
+      onClick={() => onCommit()}
+      className="touch-none cursor-grab rounded-lg active:cursor-grabbing"
+    >
+      <div
+        style={{ borderColor: isSelected ? "#ffffff" : color }}
+        className={`flex h-50 w-40 flex-col items-center justify-center gap-1 rounded-lg border-2 bg-[var(--panel)] p-4 text-center select-none ${
+          isSelected ? "" : "opacity-90"
+        }`}
+      >
+        <div className="text-3xl font-bold text-[var(--text)]">{face}</div>
+        <div className="mt-1 text-sm text-[var(--text-dim)]">{label}</div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -480,12 +541,12 @@ function QuizPanel({
   return (
     <Card className="w-[980px] space-y-8 rounded-2xl p-12">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm uppercase tracking-wide text-[var(--text-dim)]">{quiz.category}</p>
+        <p className="text-eyebrow uppercase text-[var(--text-dim)]">{quiz.category}</p>
         {readOnly && (
           <p className="text-sm font-semibold text-[var(--blue)]">{solverName}님이 퀴즈 도전 중...</p>
         )}
       </div>
-      <h2 className="text-3xl font-semibold leading-snug text-[var(--text)]">{quiz.question}</h2>
+      <h2 className="text-display text-[var(--text)]">{quiz.question}</h2>
       <div className="grid grid-cols-2 gap-5">
         {quiz.options.map((opt, idx) => (
           <Button

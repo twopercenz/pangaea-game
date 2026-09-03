@@ -250,7 +250,7 @@ function SuperContinentBadges({ room }: { room: RoomState }) {
             key={def.id}
             variant="outline"
             style={{ borderColor: state.completedBy ? color : "rgba(213,223,229,0.15)", color }}
-            className="h-auto rounded-xl border-2 bg-black/50 px-5 py-3 text-lg backdrop-blur-sm"
+            className="material h-auto rounded-xl border-2 px-5 py-3 text-lg"
           >
             <b>{def.nameKo}</b>{" "}
             <span className="text-[var(--text-dim)]">
@@ -284,7 +284,7 @@ function MergeControl({
       disabled={!selectable || done}
       onClick={onSelect}
       style={{ borderColor: selected ? "#ffffff" : done ? "#28502E" : "rgba(213,223,229,0.2)" }}
-      className={`absolute bottom-3 left-1/2 z-10 h-auto w-[min(20rem,85%)] -translate-x-1/2 flex-col items-stretch gap-0 whitespace-normal rounded-xl border bg-black/70 px-4 py-2.5 text-left backdrop-blur-sm transition-colors hover:bg-black/90 disabled:opacity-100 ${
+      className={`material absolute bottom-3 left-1/2 z-10 h-auto w-[min(20rem,85%)] -translate-x-1/2 flex-col items-stretch gap-0 whitespace-normal rounded-xl border px-4 py-2.5 text-left hover:bg-black/40 disabled:opacity-100 ${
         selectable && !done ? "cursor-pointer" : "cursor-default"
       }`}
     >

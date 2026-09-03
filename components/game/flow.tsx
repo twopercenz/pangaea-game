@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EffectCard, EffectType, RoomState, TargetId } from "@/lib/types";
+import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
+import { EVENT_PICTURES, RESULT_PICTURES, pickPicture } from "@/lib/pictures";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,11 +30,14 @@ export function GameFlow({
   playerId,
   onPlayCard,
   onAnswer,
+  onPickOption,
 }: {
   room: RoomState;
   playerId: string;
   onPlayCard: (cardId: string, targetPlateId: TargetId | null) => Promise<RoomState>;
   onAnswer: (answerIndex: number) => Promise<RoomState>;
+  /** 답변자가 보기를 고를 때마다(제출 전) 호출 — 다른 플레이어 화면에 실시간으로 보여주기 위함. 생략 가능. */
+  onPickOption?: (optionIndex: number | null) => void;
 }) {
   const [screen, setScreen] = useState<ScreenState>("OTHERS_TURN");
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -41,7 +45,13 @@ export function GameFlow({
   const [pickedOption, setPickedOption] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [drawingCard, setDrawingCard] = useState(false);
+  const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
+  const [eventPicture, setEventPicture] = useState<string | null>(null);
+  const [resultPicture, setResultPicture] = useState<string | null>(null);
   const resultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 마운트 시점의 lastEvent는 "과거 이벤트"이므로 터뜨리지 않고, 이후 바뀔 때만 새 이벤트로 본다.
+  const seenEventId = useRef<string | null>(room.lastEvent?.id ?? null);
 
   const me = room.players.find((p) => p.id === playerId);
   const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
@@ -68,12 +78,25 @@ export function GameFlow({
 
   useEffect(() => () => {
     if (resultTimer.current) clearTimeout(resultTimer.current);
+    if (eventTimer.current) clearTimeout(eventTimer.current);
   }, []);
+
+  // 서버(또는 로컬 테스트 룸)에서 새 이벤트가 오면 모두의 화면에 잠깐 띄운다 — 정답자뿐 아니라 관전자도 poll로 감지.
+  useEffect(() => {
+    const evt = room.lastEvent;
+    if (!evt || evt.id === seenEventId.current) return;
+    seenEventId.current = evt.id;
+    setActiveEvent(evt);
+    setEventPicture(pickPicture(EVENT_PICTURES[evt.eventId]));
+    if (eventTimer.current) clearTimeout(eventTimer.current);
+    eventTimer.current = setTimeout(() => setActiveEvent(null), 2600);
+  }, [room.lastEvent]);
 
   if (!me) return null;
 
   function goResultThenReset(correct: boolean) {
     setScreen(correct ? "SUCCESS" : "FAIL");
+    setResultPicture(pickPicture(RESULT_PICTURES[correct ? "correct" : "incorrect"]));
     resultTimer.current = setTimeout(() => {
       setScreen("OTHERS_TURN");
       setSelectedCard(null);
@@ -172,12 +195,12 @@ export function GameFlow({
 
       {screen === "BOARD_MODAL" && (
         <Overlay onClose={() => setScreen("SELECT_CARD")}>
-          <div className="w-[520px]">
+          <div className="w-fit">
             <PangaeaBoard room={room} selectedPlate={selectedPlate} onSelect={() => {}} selectable={false} />
             <Button
               variant="outline"
               onClick={() => setScreen("SELECT_CARD")}
-              className="mt-3 h-auto w-full rounded-xl bg-[var(--panel)] py-3 text-lg font-semibold"
+              className="mt-4 h-auto w-full rounded-xl bg-[var(--panel)] py-4 text-xl font-semibold"
             >
               닫기
             </Button>
@@ -187,7 +210,7 @@ export function GameFlow({
 
       {screen === "SELECT_PANGAEA" && (
         <Overlay>
-          <div className="w-[560px] space-y-4">
+          <div className="w-fit space-y-4">
             <p className="text-center text-base text-[var(--text-dim)]">이동시킬 조각을 선택하세요</p>
             <PangaeaBoard room={room} selectedPlate={selectedPlate} onSelect={setSelectedPlate} selectable />
             <div className="flex gap-4">
@@ -218,7 +241,10 @@ export function GameFlow({
           <QuizPanel
             quiz={room.pendingPlay.quiz}
             picked={pickedOption}
-            onPick={setPickedOption}
+            onPick={(idx) => {
+              setPickedOption(idx);
+              onPickOption?.(idx);
+            }}
             onSubmit={() => pickedOption !== null && submitAnswer(pickedOption)}
             onGiveUp={() => submitAnswer(-1)}
             busy={busy}
@@ -227,13 +253,24 @@ export function GameFlow({
       )}
 
       {(screen === "SUCCESS" || screen === "FAIL") && (
-        <ResultFlash correct={screen === "SUCCESS"} />
+        <ResultFlash correct={screen === "SUCCESS"} picture={resultPicture} />
       )}
 
-      {room.phase === "awaiting-answer" && !iAmAnswering && screen === "OTHERS_TURN" && (
-        <p className="text-center text-xs text-[var(--text-dim)]">
-          {room.players.find((p) => p.id === room.pendingPlay?.playerId)?.name}님이 퀴즈에 도전 중입니다...
-        </p>
+      {activeEvent && <EventFlash event={activeEvent} picture={eventPicture} />}
+
+      {room.phase === "awaiting-answer" && !iAmAnswering && room.pendingPlay && (
+        <Overlay>
+          <QuizPanel
+            quiz={room.pendingPlay.quiz}
+            picked={room.pendingPlay.selectedOptionIndex}
+            onPick={() => {}}
+            onSubmit={() => {}}
+            onGiveUp={() => {}}
+            busy
+            readOnly
+            solverName={room.players.find((p) => p.id === room.pendingPlay?.playerId)?.name}
+          />
+        </Overlay>
       )}
     </div>
   );
@@ -349,7 +386,7 @@ function MyTurnBase({
                 variant="ghost"
                 onClick={() => onTapCard(c.cardId)}
                 style={{ borderColor: isSelected ? "#ffffff" : myColor }}
-                className={`h-auto w-40 flex-col items-start gap-0 whitespace-normal rounded-lg border-2 bg-[var(--panel)] p-4 text-left transition hover:bg-[var(--panel)] ${
+                className={`h-50 w-40 flex-col items-center justify-center gap-1 whitespace-normal rounded-lg border-2 bg-[var(--panel)] p-4 text-center transition hover:bg-[var(--panel)] ${
                   isSelected ? "scale-105" : "opacity-90 hover:opacity-100"
                 }`}
               >
@@ -416,6 +453,8 @@ function QuizPanel({
   onSubmit,
   onGiveUp,
   busy,
+  readOnly,
+  solverName,
 }: {
   quiz: NonNullable<RoomState["pendingPlay"]>["quiz"];
   picked: number | null;
@@ -423,55 +462,106 @@ function QuizPanel({
   onSubmit: () => void;
   onGiveUp: () => void;
   busy: boolean;
+  /** true면 관전자용 — 보기만 하고 고를 수 없다. */
+  readOnly?: boolean;
+  /** readOnly일 때 "OO님이 퀴즈 도전 중" 안내에 쓸 이름. */
+  solverName?: string;
 }) {
   return (
-    <Card className="w-[720px] space-y-6 rounded-2xl p-8">
-      <p className="text-xs uppercase tracking-wide text-[var(--text-dim)]">{quiz.category}</p>
-      <h2 className="text-xl font-semibold text-[var(--text)]">{quiz.question}</h2>
-      <div className="grid grid-cols-2 gap-4">
+    <Card className="w-[980px] space-y-8 rounded-2xl p-12">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm uppercase tracking-wide text-[var(--text-dim)]">{quiz.category}</p>
+        {readOnly && (
+          <p className="text-sm font-semibold text-[var(--blue)]">{solverName}님이 퀴즈 도전 중...</p>
+        )}
+      </div>
+      <h2 className="text-3xl font-semibold leading-snug text-[var(--text)]">{quiz.question}</h2>
+      <div className="grid grid-cols-2 gap-5">
         {quiz.options.map((opt, idx) => (
           <Button
             key={idx}
             variant="outline"
-            onClick={() => onPick(idx)}
+            onClick={() => !readOnly && onPick(idx)}
+            disabled={readOnly}
             style={{ borderColor: picked === idx ? "var(--blue)" : "var(--line)" }}
-            className="h-auto justify-start whitespace-normal rounded-lg border-2 bg-black/20 px-5 py-4 text-left text-base font-normal text-[var(--text)] hover:bg-black/30"
+            className="h-auto justify-start whitespace-normal rounded-lg border-2 bg-black/20 px-6 py-6 text-left text-xl font-normal text-[var(--text)] hover:bg-black/30 disabled:opacity-100"
           >
             {idx + 1}. {opt}
           </Button>
         ))}
       </div>
-      <div className="flex gap-4">
-        <Button
-          variant="outline"
-          onClick={onGiveUp}
-          disabled={busy}
-          className="h-auto flex-1 rounded-xl py-3 text-lg font-semibold text-[var(--text-dim)] disabled:opacity-40"
-        >
-          포기
-        </Button>
-        <Button
-          onClick={onSubmit}
-          disabled={picked === null || busy}
-          className="h-auto flex-1 rounded-xl bg-[var(--blue)] py-3 text-lg font-semibold text-white hover:bg-[var(--blue)]/90 disabled:opacity-40"
-        >
-          제출
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex gap-4">
+          <Button
+            variant="outline"
+            onClick={onGiveUp}
+            disabled={busy}
+            className="h-auto flex-1 rounded-xl py-5 text-xl font-semibold text-[var(--text-dim)] disabled:opacity-40"
+          >
+            포기
+          </Button>
+          <Button
+            onClick={onSubmit}
+            disabled={picked === null || busy}
+            className="h-auto flex-1 rounded-xl bg-[var(--blue)] py-5 text-xl font-semibold text-white hover:bg-[var(--blue)]/90 disabled:opacity-40"
+          >
+            제출
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
 
-function ResultFlash({ correct }: { correct: boolean }) {
+function ResultFlash({ correct, picture }: { correct: boolean; picture: string | null }) {
   const color = correct ? "var(--green-2)" : "#b3455a";
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
       <div className="result-flash absolute inset-0" style={{ background: color }} />
       <div
-        className="relative rounded-2xl border-2 px-8 py-5 text-xl font-bold text-white"
+        className="relative flex flex-col items-center gap-4 rounded-2xl border-2 px-8 py-6 text-center"
         style={{ borderColor: color, background: "rgba(0,0,0,0.55)" }}
       >
-        {correct ? "정답!" : "오답..."}
+        {picture && (
+          // eslint-disable-next-line @next/next/no-img-element -- public/pictures 아래 임의 파일명이라 next/image 최적화 대상이 아님
+          <img src={picture} alt="" className="max-h-64 w-auto rounded-xl object-contain" />
+        )}
+        <p className="text-xl font-bold text-white">{correct ? "정답!" : "오답..."}</p>
+      </div>
+    </div>
+  );
+}
+
+const EVENT_ICON: Record<EventId, string> = {
+  meteor_strike: "☄️",
+  mass_extinction: "💀",
+  ice_age: "🥶",
+  species_boom: "🌿",
+  volcanic_boost: "🌋",
+  continental_surge: "🌍",
+};
+
+/** 정답/오답 시 확률적으로 터지는 이벤트 연출 — 모든 플레이어(관전자 포함) 화면에 뜬다. */
+function EventFlash({ event, picture }: { event: GameEvent; picture: string | null }) {
+  const color = event.good ? "var(--green-2)" : "var(--rose)";
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="result-flash absolute inset-0" style={{ background: color }} />
+      <div
+        className="relative flex max-w-xl flex-col items-center gap-3 rounded-2xl border-2 px-10 py-8 text-center"
+        style={{ borderColor: color, background: "rgba(0,0,0,0.75)" }}
+      >
+        {picture ? (
+          // eslint-disable-next-line @next/next/no-img-element -- public/pictures 아래 임의 파일명이라 next/image 최적화 대상이 아님
+          <img src={picture} alt="" className="max-h-72 w-auto rounded-xl object-contain" />
+        ) : (
+          <div className="text-6xl">{EVENT_ICON[event.eventId]}</div>
+        )}
+        <p className="text-2xl font-bold text-white">
+          {event.good ? "✨ " : "⚠️ "}
+          {event.nameKo}
+        </p>
+        <p className="text-base text-white/80">{event.description}</p>
       </div>
     </div>
   );

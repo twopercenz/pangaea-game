@@ -92,7 +92,7 @@ export function PangaeaBoard({
   return (
     // 고정 캔버스(1920x1080) 안에 항상 리플로우 없이 들어가야 하므로 aspect-ratio가 아닌
     // 고정 px 크기를 쓴다 (322:416 비율 유지).
-    <div className="relative mx-auto h-[560px] w-[434px] shrink-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--board-bg)]">
+    <div className="relative mx-auto h-[800px] w-[1200px] shrink-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--board-bg)]">
       {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우 */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="size-[70%] rounded-full bg-[var(--blue)]/[0.06] blur-3xl" />
@@ -101,7 +101,7 @@ export function PangaeaBoard({
       <div className="pointer-events-none absolute left-0 top-1/2 h-px w-full bg-[var(--line)]/60" />
       <div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-[var(--line)]/60" />
 
-      <p className="absolute left-3 top-3 z-10 text-xs text-[var(--text-dim)]">
+      <p className="absolute left-3 top-3 z-10 text-lg text-[var(--text-dim)]">
         {stage === "assemble"
           ? "1단계 — 조각을 모아 로라시아와 곤드와나를 만드세요"
           : "2단계 — 테티스 해를 닫아 두 초대륙을 합치세요"}
@@ -242,7 +242,7 @@ function PlateLabel({ shape, title, subtitle }: { shape: PlateShape; title: stri
 /** 두 초대륙의 조립 현황 배지 */
 function SuperContinentBadges({ room }: { room: RoomState }) {
   return (
-    <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-1.5">
+    <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-3">
       {SUPER_DEFS.map((def) => {
         const state = room.superContinents.find((s) => s.id === def.id)!;
         const done = def.members.filter((m) => room.plates.find((p) => p.id === m)?.completedBy).length;
@@ -253,7 +253,7 @@ function SuperContinentBadges({ room }: { room: RoomState }) {
             key={def.id}
             variant="outline"
             style={{ borderColor: state.completedBy ? color : "rgba(213,223,229,0.15)", color }}
-            className="h-auto rounded-lg bg-black/50 px-2.5 py-1 text-[11px] backdrop-blur-sm"
+            className="h-auto rounded-xl border-2 bg-black/50 px-5 py-3 text-lg backdrop-blur-sm"
           >
             <b>{def.nameKo}</b>{" "}
             <span className="text-[var(--text-dim)]">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createRoom, joinRoom, startGame, playCard, answerQuiz } from "@/lib/gameLogic";
+import { createRoom, joinRoom, startGame, playCard, answerQuiz, pickOption } from "@/lib/gameLogic";
 import { RoomState, TargetId } from "@/lib/types";
 import { ScoreBoard, FinishedPanel, SEAT_COLORS } from "@/components/game/board";
 import { GameFlow } from "@/components/game/flow";
@@ -77,6 +77,12 @@ export default function TestUiPage() {
     }
   }
 
+  function handlePickOption(idx: number | null) {
+    if (!activeRoom.pendingPlay) return;
+    pickOption(activeRoom, activeRoom.pendingPlay.playerId, idx);
+    setRoom({ ...activeRoom });
+  }
+
   const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
   const pending = room.pendingPlay;
   const viewer = room.players.find((p) => p.id === viewingPlayerId)!;
@@ -150,7 +156,13 @@ export default function TestUiPage() {
       <div className="relative min-h-0 flex-1">
         <CanvasScale>
           <div className="flex h-full w-full flex-col gap-4 p-10 text-[var(--text)]">
-            <GameFlow room={room} playerId={viewingPlayerId} onPlayCard={handlePlayCard} onAnswer={handleAnswer} />
+            <GameFlow
+              room={room}
+              playerId={viewingPlayerId}
+              onPlayCard={handlePlayCard}
+              onAnswer={handleAnswer}
+              onPickOption={handlePickOption}
+            />
             {room.phase === "finished" && <FinishedPanel room={room} />}
           </div>
         </CanvasScale>

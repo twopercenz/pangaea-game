@@ -106,6 +106,15 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     return data.room as RoomState;
   }
 
+  function handlePickOption(idx: number | null) {
+    // 실시간 미리보기 용도라 실패해도 조용히 무시 — 다음 poll에서 다시 맞춰진다.
+    fetch(`/api/rooms/${code}/pick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, optionIndex: idx }),
+    }).catch(() => {});
+  }
+
   if (!room) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--bg)] text-[var(--text-dim)]">
@@ -209,7 +218,13 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
         )}
 
         <div className="min-h-0 flex-1">
-          <GameFlow room={room} playerId={playerId} onPlayCard={handlePlayCard} onAnswer={handleAnswer} />
+          <GameFlow
+            room={room}
+            playerId={playerId}
+            onPlayCard={handlePlayCard}
+            onAnswer={handleAnswer}
+            onPickOption={handlePickOption}
+          />
         </div>
         {room.phase === "finished" && <FinishedPanel room={room} />}
       </div>

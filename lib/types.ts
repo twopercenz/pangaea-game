@@ -74,11 +74,31 @@ export interface Player {
 
 export type RoomPhase = "lobby" | "awaiting-play" | "awaiting-answer" | "finished";
 
+/** 정답/오답 시 확률적으로 터지는 지질학적 이벤트 — 좋은 효과/나쁜 효과 둘 다 있다. */
+export type EventId =
+  | "meteor_strike"
+  | "mass_extinction"
+  | "ice_age"
+  | "species_boom"
+  | "volcanic_boost"
+  | "continental_surge";
+
+export interface GameEvent {
+  /** 매 발생마다 유일한 id — 클라이언트가 "새 이벤트인지" 판별하는 용도. */
+  id: string;
+  eventId: EventId;
+  good: boolean;
+  nameKo: string;
+  description: string;
+}
+
 export interface PendingPlay {
   playerId: string;
   card: EffectCard;
   targetPlateId: TargetId | null;
   quiz: QuizCard;
+  /** 답변자가 아직 제출 전 고르고 있는 보기 — 다른 플레이어에게도 실시간으로 보여준다. */
+  selectedOptionIndex: number | null;
 }
 
 export interface RoomState {
@@ -105,5 +125,7 @@ export interface RoomState {
     plateId: TargetId | null;
   } | null;
   log: string[];
+  /** 가장 최근에 터진 이벤트 — 클라이언트가 연출을 보여주는 데만 쓰고, 없으면 null. */
+  lastEvent: GameEvent | null;
   updatedAt: number;
 }

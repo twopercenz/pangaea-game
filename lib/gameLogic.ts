@@ -3,6 +3,8 @@ import { QUIZ_BANK } from "./quizBank";
 import {
   EffectCard,
   EffectType,
+  EventId,
+  GameEvent,
   Player,
   PlateState,
   QuizCard,
@@ -90,6 +92,7 @@ export function createRoom(hostName: string): RoomState {
     phase: "lobby",
     pendingPlay: null,
     lastAnswer: null,
+    lastEvent: null,
     log: ["방이 생성되었습니다. 먼저 로라시아와 곤드와나를 만드세요."],
     updatedAt: Date.now(),
   };
@@ -183,6 +186,7 @@ export function playCard(room: RoomState, playerId: string, cardId: string, targ
     card,
     targetPlateId: card.type === "allForward1" ? (stage === "merge" ? "pangaea" : null) : targetPlateId,
     quiz,
+    selectedOptionIndex: null,
   };
   room.phase = "awaiting-answer";
   room.log.push(`${player.name}님이 카드를 내고 퀴즈에 도전합니다.`);
@@ -241,6 +245,182 @@ function advanceMerge(room: RoomState, amount: number, byPlayerId: string) {
   );
 }
 
+/** 답변자가 제출 전 보기를 고르거나 바꿀 때마다 호출 — 다른 플레이어 화면에도 실시간 반영된다. */
+export function pickOption(room: RoomState, playerId: string, optionIndex: number | null) {
+  if (room.phase !== "awaiting-answer" || !room.pendingPlay) throw new Error("지금은 답변할 수 없습니다.");
+  if (room.pendingPlay.playerId !== playerId) throw new Error("당신의 턴이 아닙니다.");
+  room.pendingPlay.selectedOptionIndex = optionIndex;
+  room.updatedAt = Date.now();
+}
+
+// 정답/오답 후 확률적으로 터지는 지질학적 이벤트 — 좋은 효과는 정답 시, 나쁜 효과는 오답 시 더 잘 나온다.
+const EVENT_DEFS: Record<EventId, { nameKo: string; good: boolean; flavor: string }> = {
+  meteor_strike: { nameKo: "운석 충돌", good: false, flavor: "거대 운석이 떨어져 지각이 크게 흔들렸습니다." },
+  mass_extinction: { nameKo: "대멸종", good: false, flavor: "대멸종이 발생해 여러 대륙의 형성이 후퇴했습니다." },
+  ice_age: { nameKo: "예정에 없던 빙하기", good: false, flavor: "갑작스러운 빙하기로 카드 한 장을 잃었습니다." },
+  species_boom: { nameKo: "생물종 번성", good: true, flavor: "생물종이 번성하며 대륙 형성이 가속되었습니다." },
+  volcanic_boost: { nameKo: "화산 활동 활발", good: true, flavor: "활발한 화산 활동 덕에 점수를 더 얻었습니다." },
+  continental_surge: { nameKo: "대륙 이동 가속", good: true, flavor: "대륙 이동이 갑자기 빨라졌습니다." },
+};
+
+let eventCounter = 0;
+
+function pickWeighted<T extends string>(weights: [T, number][]): T {
+  const total = weights.reduce((sum, [, w]) => sum + w, 0);
+  let r = Math.random() * total;
+  for (const [key, w] of weights) {
+    if (r < w) return key;
+    r -= w;
+  }
+  return weights[weights.length - 1][0];
+}
+
+/** 진행도를 늘려도 되는(완성 직전까지는 안 가는) 미완성 조각들 */
+function growablePlates(room: RoomState): PlateState[] {
+  return room.plates.filter((p) => {
+    if (p.completedBy) return false;
+    const def = PLATE_DEFS.find((d) => d.id === p.id)!;
+    return p.progress < def.trackLength - 1;
+  });
+}
+
+/** 진행도를 깎을 수 있는(0보다 큰) 미완성 조각들 */
+function shrinkablePlates(room: RoomState): PlateState[] {
+  return room.plates.filter((p) => !p.completedBy && p.progress > 0);
+}
+
+function pickRandom<T>(arr: T[]): T | null {
+  if (arr.length === 0) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * 정답/오답 처리 직후 호출된다. 40% 확률로 이벤트가 발생하고, 정답이면 좋은 효과 쪽으로,
+ * 오답이면 나쁜 효과 쪽으로 확률이 크게 기운다 (그래도 반대쪽이 아예 안 나오진 않는다).
+ * 대상이 마땅치 않으면(조각이 하나도 없거나 이미 다 완성/0 등) 점수 증감으로 대체한다.
+ */
+function maybeTriggerEvent(room: RoomState, playerId: string, correct: boolean): GameEvent | null {
+  if (Math.random() > 0.4) return null;
+
+  const wantGood = correct ? Math.random() < 0.8 : Math.random() < 0.2;
+  const eventId = wantGood
+    ? pickWeighted<EventId>([
+        ["species_boom", 45],
+        ["continental_surge", 35],
+        ["volcanic_boost", 20],
+      ])
+    : pickWeighted<EventId>([
+        ["meteor_strike", 50],
+        ["ice_age", 35],
+        ["mass_extinction", 15],
+      ]);
+
+  const def = EVENT_DEFS[eventId];
+  const player = room.players.find((p) => p.id === playerId)!;
+  const stage = stageOf(room);
+  let extra = "";
+
+  const bumpMerge = (delta: number) => {
+    room.merge.progress = Math.max(0, Math.min(room.merge.progress + delta, MERGE_DEF.trackLength - 1));
+  };
+  const bumpPlate = (plate: PlateState, delta: number) => {
+    const plateDef = PLATE_DEFS.find((d) => d.id === plate.id)!;
+    const max = plateDef.trackLength - 1; // 이벤트만으로는 완성시키지 않는다
+    plate.progress = Math.max(0, Math.min(plate.progress + delta, max));
+  };
+  const grantScore = (amount: number) => {
+    player.score = Math.max(0, player.score + amount);
+  };
+
+  switch (eventId) {
+    case "species_boom":
+    case "continental_surge": {
+      if (stage === "merge") {
+        if (!room.merge.completedBy && room.merge.progress < MERGE_DEF.trackLength - 1) {
+          bumpMerge(1);
+          extra = " (테티스 해 진행 +1)";
+        } else {
+          grantScore(2);
+          extra = " (점수 +2)";
+        }
+      } else {
+        const target = pickRandom(growablePlates(room));
+        if (target) {
+          const plateDef = PLATE_DEFS.find((d) => d.id === target.id)!;
+          bumpPlate(target, 1);
+          extra = ` (${plateDef.nameKo} 진행 +1)`;
+        } else {
+          grantScore(2);
+          extra = " (점수 +2)";
+        }
+      }
+      break;
+    }
+    case "volcanic_boost": {
+      grantScore(2);
+      extra = " (점수 +2)";
+      break;
+    }
+    case "meteor_strike": {
+      if (stage === "merge") {
+        if (!room.merge.completedBy && room.merge.progress > 0) {
+          bumpMerge(-1);
+          extra = " (테티스 해 진행 -1)";
+        } else {
+          grantScore(-1);
+          extra = " (점수 -1)";
+        }
+      } else {
+        const target = pickRandom(shrinkablePlates(room));
+        if (target) {
+          const plateDef = PLATE_DEFS.find((d) => d.id === target.id)!;
+          bumpPlate(target, -1);
+          extra = ` (${plateDef.nameKo} 진행 -1)`;
+        } else {
+          grantScore(-1);
+          extra = " (점수 -1)";
+        }
+      }
+      break;
+    }
+    case "mass_extinction": {
+      if (stage === "merge") {
+        bumpMerge(-1);
+        extra = " (테티스 해 진행 -1)";
+      } else {
+        const targets = shrinkablePlates(room);
+        for (const t of targets) bumpPlate(t, -1);
+        extra = targets.length > 0 ? " (미완성 조각 전체 진행 -1)" : "";
+      }
+      break;
+    }
+    case "ice_age": {
+      // 마지막 한 장까지 뺏지는 않는다 — 손패가 0장이 되면 다음 턴에 낼 카드가 없어진다.
+      if (player.hand.length > 1) {
+        const idx = Math.floor(Math.random() * player.hand.length);
+        const [lost] = player.hand.splice(idx, 1);
+        room.effectDiscard.push(lost);
+        extra = " (카드 1장 소실)";
+      } else {
+        grantScore(-1);
+        extra = " (점수 -1)";
+      }
+      break;
+    }
+  }
+
+  eventCounter += 1;
+  const event: GameEvent = {
+    id: `evt-${Date.now()}-${eventCounter}`,
+    eventId,
+    good: def.good,
+    nameKo: def.nameKo,
+    description: def.flavor + extra,
+  };
+  room.log.push(`${def.good ? "✨" : "⚠️"} ${event.nameKo} 발생! ${event.description}`);
+  return event;
+}
+
 export function answerQuiz(room: RoomState, playerId: string, answerIndex: number) {
   if (room.phase !== "awaiting-answer" || !room.pendingPlay) throw new Error("지금은 답변할 수 없습니다.");
   const { pendingPlay } = room;
@@ -275,6 +455,8 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
       applyCompletionCheck(room, plate, def, playerId);
     }
   }
+
+  room.lastEvent = maybeTriggerEvent(room, playerId, correct);
 
   room.lastAnswer = {
     playerId,

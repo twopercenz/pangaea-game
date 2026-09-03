@@ -295,12 +295,12 @@ function pickRandom<T>(arr: T[]): T | null {
 }
 
 /**
- * 정답/오답 처리 직후 호출된다. 40% 확률로 이벤트가 발생하고, 정답이면 좋은 효과 쪽으로,
+ * 정답/오답 처리 직후 호출된다. 5% 확률로 이벤트가 발생하고, 정답이면 좋은 효과 쪽으로,
  * 오답이면 나쁜 효과 쪽으로 확률이 크게 기운다 (그래도 반대쪽이 아예 안 나오진 않는다).
  * 대상이 마땅치 않으면(조각이 하나도 없거나 이미 다 완성/0 등) 점수 증감으로 대체한다.
  */
 function maybeTriggerEvent(room: RoomState, playerId: string, correct: boolean): GameEvent | null {
-  if (Math.random() > 0.4) return null;
+  if (Math.random() > 0.05) return null;
 
   const wantGood = correct ? Math.random() < 0.8 : Math.random() < 0.2;
   const eventId = wantGood

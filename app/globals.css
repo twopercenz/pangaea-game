@@ -75,6 +75,27 @@ body {
   animation: result-flash 1.5s ease-out forwards;
 }
 
+/* 정답/오답 사진 — 빠르게 확 떴다가 천천히 사라진다 */
+@keyframes picture-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.picture-flash {
+  animation: picture-flash 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* 보상카드 덱에서 손패로 뽑히는 연출 */
 @keyframes draw-fly {
   0% {

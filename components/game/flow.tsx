@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
 import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
+import { INCORRECT_SOUND, playSound } from "@/lib/sounds";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -103,6 +104,7 @@ export function GameFlow({
     setScreen(correct ? "SUCCESS" : "FAIL");
     const resultCategory = correct ? "correct" : "incorrect";
     setResultPicture(pickPicture(RESULT_PICTURES[resultCategory], resultCategory));
+    if (!correct) playSound(INCORRECT_SOUND);
     resultTimer.current = setTimeout(() => {
       setScreen("OTHERS_TURN");
       setSelectedCard(null);
@@ -519,21 +521,16 @@ function QuizPanel({
   );
 }
 
+// 정답/오답 연출 — 모달 없이 색 플래시 + 사진(빠르게 떴다 천천히 사라짐)만 보여준다.
 function ResultFlash({ correct, picture }: { correct: boolean; picture: string | null }) {
   const color = correct ? "var(--green-2)" : "#b3455a";
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
       <div className="result-flash absolute inset-0" style={{ background: color }} />
-      <div
-        className="relative flex flex-col items-center gap-4 rounded-2xl border-2 px-8 py-6 text-center"
-        style={{ borderColor: color, background: "rgba(0,0,0,0.55)" }}
-      >
-        {picture && (
-          // eslint-disable-next-line @next/next/no-img-element -- public/pictures 아래 임의 파일명이라 next/image 최적화 대상이 아님
-          <img src={picture} alt="" className="max-h-64 w-auto rounded-xl object-contain" />
-        )}
-        <p className="text-xl font-bold text-white">{correct ? "정답!" : "오답..."}</p>
-      </div>
+      {picture && (
+        // eslint-disable-next-line @next/next/no-img-element -- public/pictures 아래 임의 파일명이라 next/image 최적화 대상이 아님
+        <img src={picture} alt="" className="picture-flash relative max-h-[70vh] w-auto object-contain drop-shadow-2xl" />
+      )}
     </div>
   );
 }

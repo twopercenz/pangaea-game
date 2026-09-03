@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
 import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
-import { INCORRECT_SOUND, playSound } from "@/lib/sounds";
+import { INCORRECT_SOUND, playSound, preloadSounds } from "@/lib/sounds";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -85,6 +85,7 @@ export function GameFlow({
   // 결과/이벤트 사진을 미리 브라우저 캐시에 올려둬서, 실제로 뜰 때 로딩 지연이 없게 한다.
   useEffect(() => {
     preloadPictures();
+    preloadSounds();
   }, []);
 
   // 서버(또는 로컬 테스트 룸)에서 새 이벤트가 오면 모두의 화면에 잠깐 띄운다 — 정답자뿐 아니라 관전자도 poll로 감지.
@@ -104,7 +105,8 @@ export function GameFlow({
     setScreen(correct ? "SUCCESS" : "FAIL");
     const resultCategory = correct ? "correct" : "incorrect";
     setResultPicture(pickPicture(RESULT_PICTURES[resultCategory], resultCategory));
-    if (!correct) playSound(INCORRECT_SOUND);
+    // picture-flash 애니메이션이 완전히 확대/등장하는 시점(1.5s 중 10% = 150ms)에 맞춰 재생.
+    if (!correct) setTimeout(() => playSound(INCORRECT_SOUND), 150);
     resultTimer.current = setTimeout(() => {
       setScreen("OTHERS_TURN");
       setSelectedCard(null);

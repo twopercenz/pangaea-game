@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ClientRoomState, EffectCard, EffectType, EventId, GameEvent, TargetId } from "@/lib/types";
 import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
-import { INCORRECT_SOUND, playSound, preloadSounds } from "@/lib/sounds";
+import { CORRECT_SOUND, INCORRECT_SOUND, playSound, preloadSounds, unlockAudio } from "@/lib/sounds";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -119,8 +119,8 @@ export function GameFlow({
     setScreen(correct ? "SUCCESS" : "FAIL");
     const resultCategory = correct ? "correct" : "incorrect";
     setResultPicture(pickPicture(RESULT_PICTURES[resultCategory], resultCategory));
-    // picture-flash 애니메이션이 완전히 확대/등장하는 시점(1.5s 중 10% = 150ms)에 맞춰 재생.
-    if (!correct) setTimeout(() => playSound(INCORRECT_SOUND), 150);
+    // 소리는 ResultFlash의 onAnimationStart에서 재생한다 — setTimeout으로 시점을 어림잡으면
+    // 렌더/커밋/페인트 타이밍이 매번 달라서 화면 연출과 어긋난다.
     resultTimer.current = setTimeout(() => {
       setScreen("OTHERS_TURN");
       setSelectedCard(null);
@@ -145,6 +145,9 @@ export function GameFlow({
 
   async function submitAnswer(idx: number) {
     if (busy) return;
+    // 클릭(사용자 제스처)의 동기 흐름 안에서 바로 AudioContext를 깨워둔다 — await 이후로 미루면
+    // resume() 완료 시점이 브라우저마다 들쭉날쭉해져 오답 사운드가 크게 밀린다.
+    unlockAudio();
     setBusy(true);
     try {
       const updated = await onAnswer(idx);
@@ -264,6 +267,7 @@ export function GameFlow({
             quiz={room.pendingPlay.quiz}
             picked={pickedOption}
             onPick={(idx) => {
+              unlockAudio();
               setPickedOption(idx);
               onPickOption?.(idx);
             }}
@@ -540,7 +544,15 @@ function ResultFlash({ correct, picture }: { correct: boolean; picture: string |
   const color = correct ? "var(--green-2)" : "#b3455a";
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-      <div className="result-flash absolute inset-0" style={{ background: color }} />
+      <div
+        className="result-flash absolute inset-0"
+        style={{ background: color }}
+        // 이 div는 이미지 로딩과 무관하게 즉시 그려지는, 진짜 "화면이 번쩍이는" 순간이라 여기에 맞춘다.
+        // (사진 <img>의 onAnimationStart에 걸면 네트워크로 이미지가 로드될 때까지 늦게 트리거돼 최대 2초까지 밀린다.)
+        onAnimationStart={() => {
+          playSound(correct ? CORRECT_SOUND : INCORRECT_SOUND);
+        }}
+      />
       {picture && (
         // eslint-disable-next-line @next/next/no-img-element -- public/pictures 아래 임의 파일명이라 next/image 최적화 대상이 아님
         <img src={picture} alt="" className="picture-flash relative max-h-[70vh] w-auto object-contain drop-shadow-2xl" />

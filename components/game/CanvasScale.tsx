@@ -16,20 +16,20 @@ export function CanvasScale({ children }: { children: React.ReactNode }) {
   const [scale, setScale] = useState(1);
 
   useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
     function recompute() {
-      const el = outerRef.current;
-      if (!el) return;
-      const s = Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H);
-      setScale(s);
+      const box = outerRef.current;
+      if (!box) return;
+      const s = Math.min(box.clientWidth / CANVAS_W, box.clientHeight / CANVAS_H);
+      // 같은 값이면 상태를 건드리지 않는다 — 캔버스 전체 리렌더를 막는다.
+      setScale((prev) => (prev === s ? prev : s));
     }
     recompute();
+    // ResizeObserver가 창 크기 변화까지 이미 잡아주므로 window resize 리스너는 중복이었다.
     const ro = new ResizeObserver(recompute);
-    if (outerRef.current) ro.observe(outerRef.current);
-    window.addEventListener("resize", recompute);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", recompute);
-    };
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   return (

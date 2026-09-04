@@ -129,3 +129,14 @@ export interface RoomState {
   lastEvent: GameEvent | null;
   updatedAt: number;
 }
+
+/**
+ * 클라이언트에 실제로 내려보내는 방 상태. 화면이 전혀 쓰지 않는 서버 전용 필드
+ * (퀴즈 은행 전체 quizQueue, 효과 덱/버림더미, 서버 로그)를 뺀 형태다.
+ * - 폴링 응답이 매번 10KB 넘게 커지는 걸 막고,
+ * - quizQueue에 들어 있던 모든 문제의 correctIndex가 네트워크로 새어 나가는 것도 막는다.
+ */
+export type ClientRoomState = Omit<
+  RoomState,
+  "quizQueue" | "effectDeck" | "effectDiscard" | "log"
+>;

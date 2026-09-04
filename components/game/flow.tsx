@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { EffectCard, EffectType, EventId, GameEvent, RoomState, TargetId } from "@/lib/types";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { ClientRoomState, EffectCard, EffectType, EventId, GameEvent, TargetId } from "@/lib/types";
 import { EVENT_PICTURES, RESULT_PICTURES, pickPicture, preloadPictures } from "@/lib/pictures";
 import { INCORRECT_SOUND, playSound, preloadSounds } from "@/lib/sounds";
 import { PangaeaBoard, SEAT_COLORS } from "@/components/game/board";
@@ -20,6 +20,9 @@ export type ScreenState =
   | "SUCCESS"
   | "FAIL";
 
+/** memo된 자식에 넘기는 "아무것도 안 함" 콜백 — 매 렌더마다 새로 만들면 memo가 무력해진다. */
+const NOOP = () => {};
+
 const EFFECT_FACE: Record<EffectType, { face: string; label: string }> = {
   forward1: { face: "+1", label: "1칸 전진" },
   forward2: { face: "+2", label: "2칸 전진" },
@@ -33,10 +36,10 @@ export function GameFlow({
   onAnswer,
   onPickOption,
 }: {
-  room: RoomState;
+  room: ClientRoomState;
   playerId: string;
-  onPlayCard: (cardId: string, targetPlateId: TargetId | null) => Promise<RoomState>;
-  onAnswer: (answerIndex: number) => Promise<RoomState>;
+  onPlayCard: (cardId: string, targetPlateId: TargetId | null) => Promise<ClientRoomState>;
+  onAnswer: (answerIndex: number) => Promise<ClientRoomState>;
   /** 답변자가 보기를 고를 때마다(제출 전) 호출 — 다른 플레이어 화면에 실시간으로 보여주기 위함. 생략 가능. */
   onPickOption?: (optionIndex: number | null) => void;
 }) {
@@ -54,11 +57,12 @@ export function GameFlow({
   // 마운트 시점의 lastEvent는 "과거 이벤트"이므로 터뜨리지 않고, 이후 바뀔 때만 새 이벤트로 본다.
   const seenEventId = useRef<string | null>(room.lastEvent?.id ?? null);
 
-  const me = room.players.find((p) => p.id === playerId);
+  const myIndex = room.players.findIndex((p) => p.id === playerId);
+  const me = myIndex === -1 ? undefined : room.players[myIndex];
   const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
   const isMyTurn = currentPlayerId === playerId && room.phase === "awaiting-play";
   const iAmAnswering = room.pendingPlay?.playerId === playerId && room.phase === "awaiting-answer";
-  const myColor = SEAT_COLORS[room.players.findIndex((p) => p.id === playerId) % SEAT_COLORS.length] ?? SEAT_COLORS[0];
+  const myColor = SEAT_COLORS[myIndex % SEAT_COLORS.length] ?? SEAT_COLORS[0];
 
   // OTHERS_TURN(축소 뷰)에서 대기하다가 내 턴이 되면 자동으로 TURN_START_MODAL 진입.
   // 그 외 활성 상태(내가 뭔가 조작 중이던 화면)에서 턴이 내 것이 아니게 되면 안전하게 되돌린다.
@@ -98,6 +102,16 @@ export function GameFlow({
     if (eventTimer.current) clearTimeout(eventTimer.current);
     eventTimer.current = setTimeout(() => setActiveEvent(null), 2600);
   }, [room.lastEvent]);
+
+  // 카드 탭 핸들러 — screen이 바뀔 때만 새로 만들어지므로, 폴링 리렌더에는 MyTurnBase의 memo가 유지된다.
+  const handleTapCard = useCallback(
+    (cardId: string) => {
+      if (screen !== "MY_TURN") return;
+      setSelectedCard(cardId);
+      setScreen("SELECT_CARD");
+    },
+    [screen]
+  );
 
   if (!me) return null;
 
@@ -146,6 +160,8 @@ export function GameFlow({
   }
 
   const showBoardBase = screen !== "OTHERS_TURN" && screen !== "TURN_START_MODAL";
+  const solverId = room.pendingPlay?.playerId;
+  const solverName = solverId ? room.players.find((p) => p.id === solverId)?.name : undefined;
 
   return (
     <div className="relative space-y-4">
@@ -160,11 +176,7 @@ export function GameFlow({
           myColor={myColor}
           selectedCard={selectedCard}
           drawingCard={drawingCard}
-          onTapCard={(cardId) => {
-            if (screen !== "MY_TURN") return;
-            setSelectedCard(cardId);
-            setScreen("SELECT_CARD");
-          }}
+          onTapCard={handleTapCard}
           selectedPlate={selectedPlate}
           onSelectPlate={setSelectedPlate}
           boardSelectable={screen === "SELECT_PANGAEA"}
@@ -206,7 +218,7 @@ export function GameFlow({
       {screen === "BOARD_MODAL" && (
         <Overlay onClose={() => setScreen("SELECT_CARD")}>
           <div className="w-fit">
-            <PangaeaBoard room={room} selectedPlate={selectedPlate} onSelect={() => {}} selectable={false} />
+            <PangaeaBoard room={room} selectedPlate={selectedPlate} onSelect={NOOP} selectable={false} />
             <Button
               variant="outline"
               onClick={() => setScreen("SELECT_CARD")}
@@ -273,12 +285,12 @@ export function GameFlow({
           <QuizPanel
             quiz={room.pendingPlay.quiz}
             picked={room.pendingPlay.selectedOptionIndex}
-            onPick={() => {}}
-            onSubmit={() => {}}
-            onGiveUp={() => {}}
+            onPick={NOOP}
+            onSubmit={NOOP}
+            onGiveUp={NOOP}
             busy
             readOnly
-            solverName={room.players.find((p) => p.id === room.pendingPlay?.playerId)?.name}
+            solverName={solverName}
           />
         </Overlay>
       )}
@@ -297,16 +309,16 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose?: (
   );
 }
 
-function CardBack({ color }: { color: string }) {
+const CardBack = memo(function CardBack({ color }: { color: string }) {
   return (
     <div
       className="h-16 w-11 rounded-md border-2"
       style={{ borderColor: color, background: `${color}22` }}
     />
   );
-}
+});
 
-function OthersTurnView({ room, playerId }: { room: RoomState; playerId: string }) {
+const OthersTurnView = memo(function OthersTurnView({ room, playerId }: { room: ClientRoomState; playerId: string }) {
   const opponents = room.players.filter((p) => p.id !== playerId);
   const positions: ("top" | "left" | "right")[] = ["top", "left", "right"];
   const currentPlayerId = room.turnOrder[room.currentPlayerIndex];
@@ -333,7 +345,7 @@ function OthersTurnView({ room, playerId }: { room: RoomState; playerId: string 
           ))}
         </div>
 
-        <PangaeaBoard room={room} selectedPlate={null} onSelect={() => {}} selectable={false} />
+        <PangaeaBoard room={room} selectedPlate={null} onSelect={NOOP} selectable={false} />
 
         {/* 내 손패 — 하단, 파랑 뒷면 (내 턴이 아니므로 조작 불가) */}
         <div className="flex justify-center gap-1.5">
@@ -346,9 +358,9 @@ function OthersTurnView({ room, playerId }: { room: RoomState; playerId: string 
       <DeckColumn />
     </div>
   );
-}
+});
 
-function DeckColumn() {
+const DeckColumn = memo(function DeckColumn() {
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border-2 border-[var(--blue)] bg-[var(--blue)]/15 px-3 py-2 text-center text-xs font-semibold text-[var(--text)]">
@@ -359,9 +371,9 @@ function DeckColumn() {
       </div>
     </div>
   );
-}
+});
 
-function MyTurnBase({
+const MyTurnBase = memo(function MyTurnBase({
   room,
   me,
   myColor,
@@ -372,8 +384,8 @@ function MyTurnBase({
   onSelectPlate,
   boardSelectable,
 }: {
-  room: RoomState;
-  me: RoomState["players"][number];
+  room: ClientRoomState;
+  me: ClientRoomState["players"][number];
   myColor: string;
   selectedCard: string | null;
   drawingCard: boolean;
@@ -415,9 +427,9 @@ function MyTurnBase({
       <DeckColumn />
     </div>
   );
-}
+});
 
-function SelectCardPanel({
+const SelectCardPanel = memo(function SelectCardPanel({
   card,
   onSelect,
   onCancel,
@@ -454,9 +466,9 @@ function SelectCardPanel({
       </div>
     </Card>
   );
-}
+});
 
-function QuizPanel({
+const QuizPanel = memo(function QuizPanel({
   quiz,
   picked,
   onPick,
@@ -466,7 +478,7 @@ function QuizPanel({
   readOnly,
   solverName,
 }: {
-  quiz: NonNullable<RoomState["pendingPlay"]>["quiz"];
+  quiz: NonNullable<ClientRoomState["pendingPlay"]>["quiz"];
   picked: number | null;
   onPick: (idx: number) => void;
   onSubmit: () => void;
@@ -521,7 +533,7 @@ function QuizPanel({
       )}
     </Card>
   );
-}
+});
 
 // 정답/오답 연출 — 모달 없이 색 플래시 + 사진(빠르게 떴다 천천히 사라짐)만 보여준다.
 function ResultFlash({ correct, picture }: { correct: boolean; picture: string | null }) {

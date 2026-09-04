@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import { RoomState, TargetId } from "@/lib/types";
+import { ClientRoomState, TargetId } from "@/lib/types";
 import { ScoreBoard, FinishedPanel } from "@/components/game/board";
 import { GameFlow } from "@/components/game/flow";
 import { CanvasScale } from "@/components/game/CanvasScale";
@@ -10,13 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+const POLL_MS = 1500;
+
 export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
-  const [room, setRoom] = useState<RoomState | null>(null);
+  const [room, setRoom] = useState<ClientRoomState | null>(null);
   const [playerId, setPlayerId] = useState<string>("");
   const [error, setError] = useState("");
   const [nameInput, setNameInput] = useState("");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 마지막으로 받은 방 상태의 버전(updatedAt) — 서버가 "안 바뀜"을 판단하는 기준. */
+  const versionRef = useRef<number | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(`pangaea-player-${code}`);
@@ -24,32 +27,72 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     if (stored) setPlayerId(stored);
   }, [code]);
 
+  /** 응답으로 받은 방 상태를 반영하고 버전을 기록한다. */
+  const applyRoom = useCallback((next: ClientRoomState) => {
+    versionRef.current = next.updatedAt;
+    setRoom(next);
+  }, []);
+
   const fetchRoom = useCallback(async () => {
     try {
-      const url = `/api/rooms/${code}${playerId ? `?playerId=${playerId}` : ""}`;
-      const res = await fetch(url);
+      const q = new URLSearchParams();
+      if (playerId) q.set("playerId", playerId);
+      if (versionRef.current !== null) q.set("v", String(versionRef.current));
+      const res = await fetch(`/api/rooms/${code}?${q}`, { cache: "no-store" });
       const data = await res.json();
-      if (res.ok) {
-        setRoom(data.room);
-        setError("");
-      } else {
+      if (!res.ok) {
         setError(data.error || "오류가 발생했습니다.");
+        return;
       }
+      // 폴링이 성공했으면 이전 에러 배너는 지운다 (변경 없음 응답도 성공이다).
+      setError("");
+      // 바뀐 게 없으면 방 상태는 건드리지 않는다 — 리렌더(=보드 SVG 전체 재생성)를 통째로 건너뛴다.
+      if (data.unchanged) return;
+      applyRoom(data.room);
     } catch {
       setError("서버에 연결할 수 없습니다.");
     }
-  }, [code, playerId]);
+  }, [code, playerId, applyRoom]);
 
+  // 뷰어가 바뀌면(참가 등) 서버가 내려주는 내용도 달라지므로 버전 캐시를 버린다.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch + poll loop for realtime sync
-    fetchRoom();
-    pollRef.current = setInterval(fetchRoom, 1500);
+    versionRef.current = null;
+  }, [playerId]);
+
+  // setInterval 대신 "응답을 받은 뒤 다음 예약"으로 돌린다 — 응답이 1.5초보다 느려도
+  // 요청이 겹쳐 쌓이지 않는다. 탭이 백그라운드면 폴링을 멈추고, 돌아오면 즉시 한 번 당겨온다.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      if (cancelled || timer) return;
+      timer = setTimeout(tick, POLL_MS);
+    };
+    const tick = async () => {
+      timer = null;
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.hidden) return; // 보이면 다시 시작
+      await fetchRoom();
+      schedule();
+    };
+    const onVisible = () => {
+      if (document.hidden || cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      void tick();
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [fetchRoom]);
 
-  async function handleJoin() {
+  const handleJoin = useCallback(async () => {
     const res = await fetch(`/api/rooms/${code}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,10 +105,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     }
     localStorage.setItem(`pangaea-player-${code}`, data.playerId);
     setPlayerId(data.playerId);
-    setRoom(data.room);
-  }
+    applyRoom(data.room);
+  }, [code, nameInput, applyRoom]);
 
-  async function handleStart() {
+  const handleStart = useCallback(async () => {
     const res = await fetch(`/api/rooms/${code}/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -73,10 +116,10 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     });
     const data = await res.json();
     if (!res.ok) setError(data.error || "시작 실패");
-    else setRoom(data.room);
-  }
+    else applyRoom(data.room);
+  }, [code, playerId, applyRoom]);
 
-  async function handlePlayCard(cardId: string, targetPlateId: TargetId | null): Promise<RoomState> {
+  const handlePlayCard = useCallback(async (cardId: string, targetPlateId: TargetId | null): Promise<ClientRoomState> => {
     const res = await fetch(`/api/rooms/${code}/play`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,11 +130,11 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       setError(data.error || "카드를 낼 수 없습니다.");
       throw new Error(data.error);
     }
-    setRoom(data.room);
-    return data.room as RoomState;
-  }
+    applyRoom(data.room);
+    return data.room as ClientRoomState;
+  }, [code, playerId, applyRoom]);
 
-  async function handleAnswer(idx: number): Promise<RoomState> {
+  const handleAnswer = useCallback(async (idx: number): Promise<ClientRoomState> => {
     const res = await fetch(`/api/rooms/${code}/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -102,18 +145,18 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       setError(data.error || "답변 실패");
       throw new Error(data.error);
     }
-    setRoom(data.room);
-    return data.room as RoomState;
-  }
+    applyRoom(data.room);
+    return data.room as ClientRoomState;
+  }, [code, playerId, applyRoom]);
 
-  function handlePickOption(idx: number | null) {
+  const handlePickOption = useCallback((idx: number | null) => {
     // 실시간 미리보기 용도라 실패해도 조용히 무시 — 다음 poll에서 다시 맞춰진다.
     fetch(`/api/rooms/${code}/pick`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId, optionIndex: idx }),
     }).catch(() => {});
-  }
+  }, [code, playerId]);
 
   if (!room) {
     return (

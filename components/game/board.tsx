@@ -1,4 +1,5 @@
-import { PlateId, RoomState, TargetId } from "@/lib/types";
+import { memo, useMemo } from "react";
+import { ClientRoomState, PlateId, TargetId } from "@/lib/types";
 import {
   FILLER_COLOR,
   LANDMASS_PATH,
@@ -11,7 +12,7 @@ import {
   SUPER_SPLIT,
 } from "@/lib/plateShapes";
 import { MERGE_DEF, PLATE_DEFS, SUPER_DEFS, SUPER_OF_PLATE } from "@/lib/plates";
-import { stageOf } from "@/lib/gameLogic";
+import { stageOf } from "@/lib/stage";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,18 @@ export const TRACK_LENGTHS: Record<PlateId, number> = Object.fromEntries(
   PLATE_DEFS.map((p) => [p.id, p.trackLength])
 ) as Record<PlateId, number>;
 
-export function ScoreBoard({ room, currentPlayerId }: { room: RoomState; currentPlayerId: string }) {
+// 초대륙 클립 경로는 고정 도형이라 모듈 로드 시 한 번만 만들어 재사용한다.
+const SUPER_CLIP_DEFS = (
+  <defs>
+    {SUPER_DEFS.map((def) => (
+      <clipPath key={def.id} id={`cut-${def.id}`} clipPathUnits="userSpaceOnUse">
+        <polygon points={SUPER_CUT[def.id]} />
+      </clipPath>
+    ))}
+  </defs>
+);
+
+export const ScoreBoard = memo(function ScoreBoard({ room, currentPlayerId }: { room: ClientRoomState; currentPlayerId: string }) {
   return (
     <div className="flex flex-wrap gap-2">
       {room.players.map((p, i) => {
@@ -56,20 +68,30 @@ export function ScoreBoard({ room, currentPlayerId }: { room: RoomState; current
       })}
     </div>
   );
-}
+});
 
-export function PangaeaBoard({
+/**
+ * 판 전체를 그리는 SVG — 조각/고스트/육괴까지 노드 수가 많아 이 앱에서 가장 비싼 렌더다.
+ * props가 그대로면(폴링이 "변경 없음"을 받은 경우) 통째로 건너뛰도록 memo로 감싼다.
+ */
+export const PangaeaBoard = memo(function PangaeaBoard({
   room,
   selectedPlate,
   onSelect,
   selectable,
 }: {
-  room: RoomState;
+  room: ClientRoomState;
   selectedPlate: TargetId | null;
   onSelect: (id: TargetId) => void;
   selectable: boolean;
 }) {
   const stage = stageOf(room);
+  // 조각마다 players.find(...)를 다시 도는 대신 한 번만 사전을 만든다.
+  const playerNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of room.players) m.set(p.id, p.name);
+    return m;
+  }, [room.players]);
   // 합체가 진행될수록 두 초대륙 사이 테티스 해가 닫힌다.
   const mergeFrac = room.merge.progress / MERGE_DEF.trackLength;
   const splitScale = 1 - mergeFrac;
@@ -78,7 +100,7 @@ export function PangaeaBoard({
     return [sx * splitScale, sy * splitScale];
   };
   /** 조각 진행도만큼 표류가 줄어 제자리에 붙고, 소속 초대륙 전체는 합체 진행도만큼 다가온다. */
-  const placementOf = (plate: RoomState["plates"][number]) => {
+  const placementOf = (plate: ClientRoomState["plates"][number]) => {
     const isDone = !!plate.completedBy;
     const remaining = isDone ? 0 : 1 - Math.min(1, plate.progress / TRACK_LENGTHS[plate.id]);
     const [sx, sy] = splitOf(plate.id);
@@ -90,8 +112,13 @@ export function PangaeaBoard({
     // 고정 캔버스(1920x1080) 안에 항상 리플로우 없이 들어가야 하므로 aspect-ratio가 아닌
     // 고정 px 크기를 쓴다 (322:416 비율 유지).
     <div className="relative mx-auto h-[800px] w-[1200px] shrink-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--board-bg)]">
-      {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우 */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {/* map-grid-layer: 크로스헤어 가이드 + 방사형 글로우.
+          내용이 고정된 장식이라 별도 합성 레이어로 올려둔다 — 조각이 700ms 동안 움직일 때
+          이 큰 blur를 매 프레임 다시 그리지 않게 된다 (보이는 결과는 동일). */}
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        style={{ transform: "translateZ(0)" }}
+      >
         <div className="size-[70%] rounded-full bg-[var(--blue)]/[0.06] blur-3xl" />
         <div className="absolute size-[100%] rounded-full bg-[var(--green-2)]/[0.05] blur-3xl" />
       </div>
@@ -130,13 +157,7 @@ export function PangaeaBoard({
         })}
 
         {/* 조각이 다 붙은 초대륙은 원본 지도의 육괴로 조각 사이 틈을 메운다. */}
-        <defs>
-          {SUPER_DEFS.map((def) => (
-            <clipPath key={def.id} id={`cut-${def.id}`} clipPathUnits="userSpaceOnUse">
-              <polygon points={SUPER_CUT[def.id]} />
-            </clipPath>
-          ))}
-        </defs>
+        {SUPER_CLIP_DEFS}
         {SUPER_DEFS.map((def) => {
           const assembled = room.superContinents.find((s) => s.id === def.id)?.completedBy;
           if (!assembled) return null;
@@ -163,7 +184,7 @@ export function PangaeaBoard({
           const trackLen = TRACK_LENGTHS[plate.id];
           const { isDone, transform } = placementOf(plate);
           const isSelected = selectedPlate === plate.id;
-          const owner = room.players.find((p) => p.id === plate.completedBy);
+          const ownerName = plate.completedBy ? playerNameById.get(plate.completedBy) : undefined;
           const clickable = selectable && stage === "assemble" && !isDone;
 
           return (
@@ -196,7 +217,7 @@ export function PangaeaBoard({
               <PlateLabel
                 shape={shape}
                 title={PLATE_NAME[plate.id]}
-                subtitle={isDone ? `${owner?.name ?? ""} 완성` : `${plate.progress}/${trackLen}칸`}
+                subtitle={isDone ? `${ownerName ?? ""} 완성` : `${plate.progress}/${trackLen}칸`}
               />
             </g>
           );
@@ -213,7 +234,7 @@ export function PangaeaBoard({
       )}
     </div>
   );
-}
+});
 
 /** 조각 위에 얹는 이름 + 진행도. 외곽선을 깔아 어떤 색 위에서도 읽히게 한다. */
 function PlateLabel({ shape, title, subtitle }: { shape: PlateShape; title: string; subtitle: string }) {
@@ -237,7 +258,7 @@ function PlateLabel({ shape, title, subtitle }: { shape: PlateShape; title: stri
 }
 
 /** 두 초대륙의 조립 현황 배지 */
-function SuperContinentBadges({ room }: { room: RoomState }) {
+function SuperContinentBadges({ room }: { room: ClientRoomState }) {
   return (
     <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-3">
       {SUPER_DEFS.map((def) => {
@@ -270,7 +291,7 @@ function MergeControl({
   selectable,
   onSelect,
 }: {
-  room: RoomState;
+  room: ClientRoomState;
   selected: boolean;
   selectable: boolean;
   onSelect: () => void;
@@ -307,7 +328,7 @@ function MergeControl({
   );
 }
 
-export function FinishedPanel({ room }: { room: RoomState }) {
+export function FinishedPanel({ room }: { room: ClientRoomState }) {
   const ranked = [...room.players].sort((a, b) => b.score - a.score);
   return (
     <Card className="border-[var(--green-2)]/40 bg-[var(--green-2)]/10">

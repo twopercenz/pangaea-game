@@ -50,7 +50,11 @@
 }
 
 body {
+  /* Pretendard Variable(동적 서브셋)이 먼저 — 굵기 하나당 ~770KB짜리 통 woff2를 굵기별로
+     받던 걸, 화면에 실제로 쓰인 글자 조각만 받는 가변 폰트 하나로 대체한다. 생김새는 동일하고,
+     혹시 CDN이 죽으면 기존 "Pretendard"(로컬 설치본) → 시스템 폰트로 자연스럽게 내려간다. */
   font-family:
+    "Pretendard Variable",
     "Pretendard",
     ui-sans-serif,
     system-ui,

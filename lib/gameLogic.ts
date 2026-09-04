@@ -1,22 +1,22 @@
 import { MERGE_DEF, PLATE_DEFS, SUPER_DEFS, SUPER_MAP, SUPER_OF_PLATE } from "./plates";
 import { QUIZ_BANK } from "./quizBank";
+import { stageOf } from "./stage";
 import {
   EffectCard,
   EffectType,
   EventId,
   GameEvent,
+  PlateDef,
+  PlateId,
   Player,
   PlateState,
   QuizCard,
+  ClientRoomState,
   RoomState,
-  Stage,
   TargetId,
 } from "./types";
 
-/** 6조각이 모두 완성되면 두 초대륙이 완성된 것이므로, 판게아 합체 단계로 넘어간다. */
-export function stageOf(room: RoomState): Stage {
-  return room.plates.every((p) => p.completedBy) ? "merge" : "assemble";
-}
+export { stageOf } from "./stage";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -41,6 +41,22 @@ function buildEffectDeck(): EffectCard[] {
     ...Array.from({ length: 4 }, () => makeEffectCard("allForward1")),
   ];
   return shuffle(deck);
+}
+
+/** id -> def 사전. PLATE_DEFS.find(...)를 매 호출마다 도는 대신 한 번만 만든다. */
+const PLATE_DEF_MAP: Record<PlateId, PlateDef> = Object.fromEntries(
+  PLATE_DEFS.map((d) => [d.id, d])
+) as Record<PlateId, PlateDef>;
+
+/**
+ * updatedAt은 클라이언트 폴링의 버전 번호로도 쓰이므로 절대 뒤로 가거나 멈추면 안 된다.
+ * 같은 밀리초 안에 두 번 바뀌어도 값이 달라지도록 단조 증가시킨다.
+ */
+const MAX_LOG = 200;
+function touch(room: RoomState) {
+  room.updatedAt = Math.max(Date.now(), room.updatedAt + 1);
+  // 로그는 화면에 쓰이지 않는데도 blob에 무한정 쌓여 저장/직렬화 비용만 늘린다.
+  if (room.log.length > MAX_LOG) room.log.splice(0, room.log.length - MAX_LOG);
 }
 
 export function drawEffectCard(room: RoomState): EffectCard {
@@ -111,7 +127,7 @@ export function joinRoom(room: RoomState, name: string): Player {
   room.players.push(player);
   room.turnOrder.push(id);
   room.log.push(`${player.name}님이 입장했습니다.`);
-  room.updatedAt = Date.now();
+  touch(room);
   return player;
 }
 
@@ -128,18 +144,31 @@ export function startGame(room: RoomState) {
   room.phase = "awaiting-play";
   room.currentPlayerIndex = 0;
   room.log.push("게임이 시작되었습니다!");
-  room.updatedAt = Date.now();
+  touch(room);
 }
 
-// 정답 인덱스는 답변 당사자를 제외한 다른 클라이언트에는 숨긴다 (네트워크 탭으로 컨닝 방지)
-export function sanitizeRoomForPlayer(room: RoomState, viewerId: string | null): RoomState {
-  if (!room.pendingPlay) return room;
-  if (viewerId === room.pendingPlay.playerId) return room;
+/**
+ * 클라이언트로 내보낼 방 상태를 만든다.
+ * - 화면이 쓰지 않는 서버 전용 필드(quizQueue/effectDeck/effectDiscard/log)는 통째로 뺀다.
+ *   폴링이 1.5초마다 도는데 quizQueue만 10KB가 넘어서, 이게 대역폭의 대부분이었다.
+ * - 정답 인덱스는 답변 당사자를 제외한 다른 클라이언트에는 숨긴다 (네트워크 탭으로 컨닝 방지)
+ */
+export function sanitizeRoomForPlayer(room: RoomState, viewerId: string | null): ClientRoomState {
+  /* eslint-disable @typescript-eslint/no-unused-vars -- 서버 전용 필드를 rest로 덜어내기 위한 구조 분해 */
+  const {
+    quizQueue: _quizQueue,
+    effectDeck: _effectDeck,
+    effectDiscard: _effectDiscard,
+    log: _log,
+    ...view
+  } = room;
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+  if (!view.pendingPlay || viewerId === view.pendingPlay.playerId) return view;
   return {
-    ...room,
+    ...view,
     pendingPlay: {
-      ...room.pendingPlay,
-      quiz: { ...room.pendingPlay.quiz, correctIndex: -1 as unknown as 0 },
+      ...view.pendingPlay,
+      quiz: { ...view.pendingPlay.quiz, correctIndex: -1 as unknown as 0 },
     },
   };
 }
@@ -190,7 +219,7 @@ export function playCard(room: RoomState, playerId: string, cardId: string, targ
   };
   room.phase = "awaiting-answer";
   room.log.push(`${player.name}님이 카드를 내고 퀴즈에 도전합니다.`);
-  room.updatedAt = Date.now();
+  touch(room);
 }
 
 const EFFECT_LABEL: Record<EffectType, string> = {
@@ -199,7 +228,7 @@ const EFFECT_LABEL: Record<EffectType, string> = {
   allForward1: "전체 조각 1칸 전진",
 };
 
-function applyCompletionCheck(room: RoomState, plate: PlateState, def = PLATE_DEFS.find((d) => d.id === plate.id)!, byPlayerId: string) {
+function applyCompletionCheck(room: RoomState, plate: PlateState, def = PLATE_DEF_MAP[plate.id], byPlayerId: string) {
   if (plate.completedBy || plate.progress < def.trackLength) return;
   plate.progress = def.trackLength;
   plate.completedBy = byPlayerId;
@@ -250,7 +279,7 @@ export function pickOption(room: RoomState, playerId: string, optionIndex: numbe
   if (room.phase !== "awaiting-answer" || !room.pendingPlay) throw new Error("지금은 답변할 수 없습니다.");
   if (room.pendingPlay.playerId !== playerId) throw new Error("당신의 턴이 아닙니다.");
   room.pendingPlay.selectedOptionIndex = optionIndex;
-  room.updatedAt = Date.now();
+  touch(room);
 }
 
 // 정답/오답 후 확률적으로 터지는 지질학적 이벤트 — 좋은 효과는 정답 시, 나쁜 효과는 오답 시 더 잘 나온다.
@@ -279,7 +308,7 @@ function pickWeighted<T extends string>(weights: [T, number][]): T {
 function growablePlates(room: RoomState): PlateState[] {
   return room.plates.filter((p) => {
     if (p.completedBy) return false;
-    const def = PLATE_DEFS.find((d) => d.id === p.id)!;
+    const def = PLATE_DEF_MAP[p.id];
     return p.progress < def.trackLength - 1;
   });
 }
@@ -324,7 +353,7 @@ function maybeTriggerEvent(room: RoomState, playerId: string, correct: boolean):
     room.merge.progress = Math.max(0, Math.min(room.merge.progress + delta, MERGE_DEF.trackLength - 1));
   };
   const bumpPlate = (plate: PlateState, delta: number) => {
-    const plateDef = PLATE_DEFS.find((d) => d.id === plate.id)!;
+    const plateDef = PLATE_DEF_MAP[plate.id];
     const max = plateDef.trackLength - 1; // 이벤트만으로는 완성시키지 않는다
     plate.progress = Math.max(0, Math.min(plate.progress + delta, max));
   };
@@ -346,7 +375,7 @@ function maybeTriggerEvent(room: RoomState, playerId: string, correct: boolean):
       } else {
         const target = pickRandom(growablePlates(room));
         if (target) {
-          const plateDef = PLATE_DEFS.find((d) => d.id === target.id)!;
+          const plateDef = PLATE_DEF_MAP[target.id];
           bumpPlate(target, 1);
           extra = ` (${plateDef.nameKo} 진행 +1)`;
         } else {
@@ -373,7 +402,7 @@ function maybeTriggerEvent(room: RoomState, playerId: string, correct: boolean):
       } else {
         const target = pickRandom(shrinkablePlates(room));
         if (target) {
-          const plateDef = PLATE_DEFS.find((d) => d.id === target.id)!;
+          const plateDef = PLATE_DEF_MAP[target.id];
           bumpPlate(target, -1);
           extra = ` (${plateDef.nameKo} 진행 -1)`;
         } else {
@@ -444,13 +473,13 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
       // 합체 단계의 전체 전진 카드는 playCard에서 "pangaea"로 지정되므로 여기는 조립 단계뿐이다.
       for (const plate of room.plates) {
         if (plate.completedBy) continue;
-        const def = PLATE_DEFS.find((d) => d.id === plate.id)!;
+        const def = PLATE_DEF_MAP[plate.id];
         plate.progress = Math.min(plate.progress + 1, def.trackLength);
         applyCompletionCheck(room, plate, def, playerId);
       }
     } else {
       const plate = room.plates.find((p) => p.id === pendingPlay.targetPlateId)!;
-      const def = PLATE_DEFS.find((d) => d.id === plate.id)!;
+      const def = PLATE_DEF_MAP[plate.id];
       plate.progress = Math.min(plate.progress + amount, def.trackLength);
       applyCompletionCheck(room, plate, def, playerId);
     }
@@ -475,5 +504,5 @@ export function answerQuiz(room: RoomState, playerId: string, answerIndex: numbe
     room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.turnOrder.length;
     room.phase = "awaiting-play";
   }
-  room.updatedAt = Date.now();
+  touch(room);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { answerQuiz } from "@/lib/gameLogic";
+import { answerQuiz, sanitizeRoomForPlayer } from "@/lib/gameLogic";
 import { getRoom, setRoom } from "@/lib/store";
 
 export async function POST(
@@ -17,7 +17,7 @@ export async function POST(
   try {
     answerQuiz(room, playerId, answerIndex);
     await setRoom(room.code, room);
-    return NextResponse.json({ room });
+    return NextResponse.json({ room: sanitizeRoomForPlayer(room, playerId) });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }
